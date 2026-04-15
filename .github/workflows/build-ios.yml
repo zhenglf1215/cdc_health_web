@@ -1,0 +1,198 @@
+name: Build iOS App
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  NODE_VERSION: '20'
+  XCODE_VERSION: '15.0'
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: Actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Next.js app
+        run: pnpm build
+
+      - name: Install Capacitor CLI
+        run: npm install -g @capacitor/cli
+
+      - name: Initialize Capacitor
+        run: |
+          if [ ! -f "capacitor.config.ts" ]; then
+            echo "❌ capacitor.config.ts not found"
+            exit 1
+          fi
+
+      - name: Add iOS platform
+        run: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          else
+            echo "✅ iOS platform already exists"
+          fi
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build iOS App (Development)
+        run: |
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath DerivedData \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            clean build
+
+      - name: Archive iOS App
+        run: |
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath DerivedData/App.xcarchive \
+            archive
+
+      - name: Export IPA
+        run: |
+          cd ios/App
+          xcodebuild \
+            -exportArchive \
+            -archivePath DerivedData/App.xcarchive \
+            -exportPath DerivedData/Export \
+            -exportOptionsPlist exportOptions.plist
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ios
+          path: ios/App/DerivedData/Export/*.ipa
+          retention-days: 30
+
+      - name: Generate build info
+        id: build-info
+        run: |
+          echo "BUILD_TIME=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "RUN_NUMBER=${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ios/App/DerivedData/Export/*.ipa
+          body: |
+            ## 📱 专属检测助手 - iOS应用
+
+            **版本**: ${{ github.ref_name }}
+            **构建时间**: ${{ steps.build-info.outputs.BUILD_TIME }}
+            **提交**: ${{ github.sha }}
+            **构建编号**: ${{ github.run_number }}
+
+            ### 下载说明
+
+            - **app-ios.ipa**: iOS应用安装包
+
+            ### 安装方法
+
+            1. 下载IPA文件
+            2. 使用Xcode或第三方工具安装
+            3. 或使用TestFlight分发
+
+            ### 功能说明
+
+            - ✅ 支持蓝牙连接智能手表
+            - ✅ 实时心率数据采集
+            - ✅ 数据上传到服务器
+            - ✅ 应用者和管理者双角色
+
+            ### 支持设备
+
+            - 小米手环8
+            - iQOO Watch
+            - 其他支持标准BLE心率协议的设备
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send success notification
+        if: success()
+        run: |
+          echo "✅ iOS应用构建成功！"
+          echo "📦 构建时间: ${{ steps.build-info.outputs.BUILD_TIME }}"
+          echo "🔗 下载链接: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Send failure notification
+        if: failure()
+        run: |
+          echo "❌ iOS应用构建失败"
+          echo "📅 构建时间: ${{ steps.build-info.outputs.BUILD_TIME }}"
+          echo "🔗 日志链接: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
