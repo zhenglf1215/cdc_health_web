@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bash ./scripts/dev.sh",
-    "build": "bash ./scripts/build.sh",
-    "start": "bash ./scripts/start.sh"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
