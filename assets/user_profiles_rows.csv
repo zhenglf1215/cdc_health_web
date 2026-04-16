@@ -1,0 +1,6 @@
+id,user_id,avatar_url,email,phone,birth_date,gender,height,weight,bmi,blood_type,medical_history,allergies,exercise_frequency,sleep_hours,smoking_status,drinking_status,emergency_contact_name,emergency_contact_phone,created_at,updated_at,resting_hr
+1,8b513134-b9df-45a5-a926-f6c801084ce8,avatars/8b513134-b9df-45a5-a926-f6c801084ce8_avatar4_5cde4893.jpg,,,1995-01-01,,,70.00,,,,,,,,,,,2026-04-11 19:00:28.619674+08,2026-04-13 21:16:59.845318+08,65
+2,dcd32958-1d5e-4d03-9582-89102e8b0f15,avatars/dcd32958-1d5e-4d03-9582-89102e8b0f15_avatar5_7b8d2c5f.jpg,,,1995-01-01,,,70.00,,,,,,,,,,,2026-04-11 19:00:28.619674+08,2026-04-13 21:16:59.845318+08,65
+3,2d2c356b-316f-4dde-96bf-141be85c95d4,avatars/2d2c356b-316f-4dde-96bf-141be85c95d4_avatar1_06d1a4ca.jpg,,,1995-01-01,,,70.00,,,,,,,,,,,2026-04-11 19:00:28.619674+08,2026-04-13 21:16:59.845318+08,65
+4,954f26e9-d9e0-4a48-a834-8378a4c84a11,avatars/954f26e9-d9e0-4a48-a834-8378a4c84a11_avatar3_60a49dfc.jpg,,,1990-01-01,male,170.00,65.00,,,,,,,,,,,2026-04-11 19:00:28.619674+08,2026-04-14 15:10:34.749534+08,65
+5,92883904-422c-4647-8cee-ff1a745a603e,avatars/92883904-422c-4647-8cee-ff1a745a603e_avatar2_2df67b76.jpg,,,,,,,,,,,,,,,,,2026-04-11 19:00:28.619674+08,2026-04-11 19:00:47.638923+08,65
