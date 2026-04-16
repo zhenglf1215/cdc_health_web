@@ -2,6 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   
+  // 启用 app directory
+  experimental: {
+    appDir: true,
+  },
+  
   images: {
     remotePatterns: [
       {
