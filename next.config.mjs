@@ -1,9 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 启用 React 严格模式
+  // 指定源码目录
   reactStrictMode: true,
   
-  // 图片优化配置
   images: {
     remotePatterns: [
       {
