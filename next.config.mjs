@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 指定源码目录
   reactStrictMode: true,
   
   images: {
