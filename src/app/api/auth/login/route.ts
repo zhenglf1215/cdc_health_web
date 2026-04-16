@@ -30,8 +30,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 简单的密码验证（不加密）
-    if (password !== user.password) {
+    // 使用 bcryptjs 验证密码
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
       return NextResponse.json(
         { error: '用户名或密码错误' },
         { status: 401 }

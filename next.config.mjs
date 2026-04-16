@@ -1,9 +1,5 @@
-import type { NextConfig } from 'next';
-
-const nextConfig: NextConfig = {
-  // 禁用 Next.js DevTools（隐藏开发工具悬浮按钮）
-  devIndicators: false,
-  
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   // 启用 React 严格模式
   reactStrictMode: true,
   
@@ -21,11 +17,6 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
-  },
-  
-  // 编译优化 - 移除生产环境console
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
   },
 };
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,12 +42,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 直接存储明文密码
+    // 使用 bcryptjs 加密密码
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
     const { data, error } = await client
       .from('users')
       .insert({
         username,
-        password: password,
+        password: hashedPassword,
         role,
         company: company || null,
       })
