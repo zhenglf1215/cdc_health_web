@@ -140,12 +140,12 @@ export default function TcrPage() {
       try {
         const res = await fetch(`/api/heart-rate/history?userId=${userId}&timeRange=date:${dateStr}`);
         const data = await res.json();
-        const tskRecords = data.data?.filter((r: { data_type: string }) => r.data_type === 'tsk') || [];
+        const tcrRecords = data.data?.filter((r: { data_type: string }) => r.data_type === 'tcr') || [];
         days.push({
           date: dateStr,
           label: getDayLabel(i),
-          hasData: tskRecords.length > 0,
-          count: tskRecords.length
+          hasData: tcrRecords.length > 0,
+          count: tcrRecords.length
         });
       } catch {
         days.push({
