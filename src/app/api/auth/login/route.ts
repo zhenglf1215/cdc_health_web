@@ -31,7 +31,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 使用 bcryptjs 验证密码
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // 同时支持明文密码和哈希密码（兼容不同数据来源）
+    let isPasswordValid = false;
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      // 数据库存的是bcrypt哈希
+      isPasswordValid = await bcrypt.compare(password, user.password);
+    } else {
+      // 数据库存的是明文密码
+      isPasswordValid = password === user.password;
+    }
     
     if (!isPasswordValid) {
       return NextResponse.json(
