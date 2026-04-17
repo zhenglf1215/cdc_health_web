@@ -199,6 +199,19 @@ export default function ProfilePage() {
 
       if (result.success) {
         setMessage({ type: 'success', text: '保存成功！' });
+        // 同步更新 localStorage 中的头像（保持管理界面和用户界面头像一致）
+        if (profile.avatar_url) {
+          const storedUser = localStorage.getItem('user');
+          if (storedUser) {
+            try {
+              const userData = JSON.parse(storedUser);
+              userData.avatar_url = profile.avatar_url;
+              localStorage.setItem('user', JSON.stringify(userData));
+            } catch (e) {
+              console.error('更新localStorage头像失败:', e);
+            }
+          }
+        }
         setTimeout(() => setMessage(null), 3000);
       } else {
         setMessage({ type: 'error', text: result.message || '保存失败' });
