@@ -158,12 +158,26 @@ export default function CDCMeasurePage() {
       let parsedData: {tcr: number[], tsk: number[], hr: number[]} = { tcr: [], tsk: [], hr: [] };
 
       if (fileExt === '.json') {
-        // JSON格式：期望格式 { "tcr": [...], "tsk": [...], "hr": [...] }
+        // JSON格式支持两种：
+        // 1. { "tcr": [36.5, 36.6], ... } - 简单数组
+        // 2. { "tcr": [{timestamp, value}, ...], ... } - 带时间戳的对象数组
         const jsonData = JSON.parse(text);
+        
+        const parseArray = (arr: any[]): number[] => {
+          if (!Array.isArray(arr)) return [];
+          return arr.map(item => {
+            if (typeof item === 'number') return item;
+            if (typeof item === 'object' && item !== null) {
+              return typeof item.value === 'number' ? item.value : parseFloat(item.value);
+            }
+            return parseFloat(item);
+          }).filter(v => !isNaN(v));
+        };
+        
         parsedData = {
-          tcr: Array.isArray(jsonData.tcr) ? jsonData.tcr : [],
-          tsk: Array.isArray(jsonData.tsk) ? jsonData.tsk : [],
-          hr: Array.isArray(jsonData.hr) ? jsonData.hr : []
+          tcr: parseArray(jsonData.tcr),
+          tsk: parseArray(jsonData.tsk),
+          hr: parseArray(jsonData.hr)
         };
       } else if (fileExt === '.csv') {
         // CSV格式：第一列类型，后面是数据值
