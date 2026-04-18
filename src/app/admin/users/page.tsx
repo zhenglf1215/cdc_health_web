@@ -263,6 +263,40 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
+      <style jsx global>{`
+        @keyframes breathe-border {
+          0%, 100% { 
+            box-shadow: 0 0 5px 0 rgba(239, 68, 68, 0.8);
+            border-color: rgb(239, 68, 68);
+          }
+          50% { 
+            box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.4);
+            border-color: rgb(220, 38, 38);
+          }
+        }
+        @keyframes breathe-glow {
+          0%, 100% { 
+            box-shadow: 0 0 5px 3px rgba(239, 68, 68, 0.9);
+          }
+          50% { 
+            box-shadow: 0 0 15px 5px rgba(239, 68, 68, 0.4);
+          }
+        }
+        @keyframes breathe-tag {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(0.95); }
+        }
+        .user-card-breathing {
+          animation: breathe-border 1.5s ease-in-out infinite;
+        }
+        .user-avatar-glow {
+          animation: breathe-glow 1.5s ease-in-out infinite;
+        }
+        .alert-tag-breathing {
+          animation: breathe-tag 1.5s ease-in-out infinite;
+        }
+      `}</style>
+      
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
         <div>
@@ -307,12 +341,12 @@ export default function AdminUsersPage() {
           const userAlerts = alerts.filter(u => u.id === user.id);
           const alert = isUserAlert(user.id);
           return (
-            <Card key={user.id} className={`bg-white hover:shadow-md ${alert ? 'ring-2 ring-red-500 animate-pulse' : ''}`}>
+            <Card key={user.id} className={`bg-white hover:shadow-md ${alert ? 'border-2 user-card-breathing' : ''}`}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     {/* 头像 */}
-                    <div className={`w-14 h-14 rounded-full border-2 shadow-lg overflow-hidden ${alert ? 'ring-4 ring-red-400' : ''} bg-gradient-to-br from-blue-500 to-purple-600`}>
+                    <div className={`w-14 h-14 rounded-full border-2 shadow-lg overflow-hidden ${alert ? 'user-avatar-glow' : ''} bg-gradient-to-br from-blue-500 to-purple-600`}>
                       {user.avatar_url ? (
                         <img 
                           src={user.avatar_url} 
@@ -334,8 +368,8 @@ export default function AdminUsersPage() {
                         {user.username}
                         {alert && (
                           <div className="flex gap-1">
-                            {userAlerts.some(u => u.type === 'tcr') && <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full animate-pulse">⚠️高温</span>}
-                            {userAlerts.some(u => u.type === 'hr') && <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full animate-pulse">❤️高心率</span>}
+                            {userAlerts.some(u => u.type === 'tcr') && <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full alert-tag-breathing">⚠️高温</span>}
+                            {userAlerts.some(u => u.type === 'hr') && <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full alert-tag-breathing">❤️高心率</span>}
                           </div>
                         )}
                       </div>

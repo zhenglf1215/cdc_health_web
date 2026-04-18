@@ -219,21 +219,58 @@ export function GlobalAlertBanner() {
   const showEndState = alertTrigger === 'end' && isAlerting === false;
 
   return (
-    <div className={`fixed top-0 left-0 right-0 z-[100] px-4 py-3 shadow-lg ${
-      showEndState 
-        ? 'bg-green-600 text-white' 
-        : 'bg-red-600 text-white'
-    }`}>
-      <div className="container mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {showEndState ? (
-            <>
-              <span className="text-xl">✅</span>
-              <span className="text-lg font-medium">报警结束</span>
-            </>
-          ) : (
-            <>
-              <AlertTriangle className="w-6 h-6 animate-pulse" />
+    <>
+      <style jsx global>{`
+        @keyframes breathe {
+          0%, 100% { 
+            opacity: 1; 
+            transform: scale(1);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
+          }
+          50% { 
+            opacity: 0.8; 
+            transform: scale(0.98);
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
+          }
+        }
+        @keyframes breathe-border {
+          0%, 100% { 
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
+          }
+          50% { 
+            box-shadow: 0 0 15px 5px rgba(239, 68, 68, 0.5);
+          }
+        }
+        @keyframes breathe-red {
+          0%, 100% { background-color: #dc2626; }
+          50% { background-color: #b91c1c; }
+        }
+        .alert-breathing {
+          animation: breathe-red 1.5s ease-in-out infinite;
+        }
+        .alert-icon-breathing {
+          animation: breathe 1.5s ease-in-out infinite;
+        }
+        .user-card-breathing {
+          animation: breathe-border 1.5s ease-in-out infinite;
+        }
+      `}</style>
+      
+      <div className={`fixed top-0 left-0 right-0 z-[100] px-4 py-3 shadow-lg ${
+        showEndState 
+          ? 'bg-green-600 text-white' 
+          : 'alert-breathing text-white'
+      }`}>
+        <div className="container mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {showEndState ? (
+              <>
+                <span className="text-xl">✅</span>
+                <span className="text-lg font-medium">报警结束</span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="w-6 h-6 alert-icon-breathing" />
               <div className="flex items-center gap-4">
                 <span className={`text-sm px-3 py-1 rounded ${
                   alertTrigger === 'start' 
