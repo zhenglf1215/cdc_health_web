@@ -288,7 +288,7 @@ export function GlobalAlertBanner() {
             setIsAlerting(false);
             setAlertUsers([]);
             setAlertTrigger(null);
-            stopSound();
+            stopBeep();
           }}
           className="text-white/80 hover:text-white text-2xl leading-none"
         >
