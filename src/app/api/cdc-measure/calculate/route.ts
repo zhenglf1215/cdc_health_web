@@ -51,7 +51,7 @@ function calculateSkew(values: number[], avg: number, sd: number): number {
 // 数据类型映射：前端传入的字段名 -> 数据库字段名
 const TYPE_MAP: Record<string, string> = {
   'hr': 'hr',    // 心率
-  'tcr': 'tre',  // 核心体温 (Tre = 核心体温估算)
+  'tcr': 'tcr',  // 核心体温
   'tsk': 'tsk'   // 皮肤温度
 };
 
