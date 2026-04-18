@@ -48,6 +48,11 @@ export default function ApplicantHomePage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ===== 位置检索状态 =====
+  const [environments, setEnvironments] = useState<PublishedEnvironment[]>([]);
+  const [envsLoading, setEnvsLoading] = useState(false);
+  const [selectedEnv, setSelectedEnv] = useState<PublishedEnvironment | null>(null);
+
   // ===== 生命体征测量状态 =====
   const [uploadMode, setUploadMode] = useState<'bluetooth' | 'file'>('bluetooth');
   const [isMeasuring, setIsMeasuring] = useState(false);
@@ -80,7 +85,6 @@ export default function ApplicantHomePage() {
   const [mapReady, setMapReady] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [gpsPosition, setGpsPosition] = useState<{ lng: number; lat: number } | null>(null);
-  const [environments, setEnvironments] = useState<PublishedEnvironment[]>([]);
   const mapRef = useRef<any>(null);
   const gpsMarkerRef = useRef<any>(null);
 
@@ -98,6 +102,7 @@ export default function ApplicantHomePage() {
   const [clothingAdvice, setClothingAdvice] = useState('');
   const [adviceLoading, setAdviceLoading] = useState(false);
 
+  // 初始化
   useEffect(() => {
     (window as any)._AMapSecurityConfig = {
       securityJsCode: '2b2821be9825aa9ee71a6f9c8d82ccb1',
@@ -109,8 +114,31 @@ export default function ApplicantHomePage() {
       return;
     }
     setUser(userData);
+    loadEnvironments(userData.id);
     setLoading(false);
   }, [router]);
+
+  // 加载已发布环境列表
+  const loadEnvironments = async (userId: string) => {
+    setEnvsLoading(true);
+    try {
+      const res = await fetch(`/api/environments?user_id=${userId}`);
+      const data = await res.json();
+      if (data.success) setEnvironments(data.data || []);
+    } catch (err) {
+      console.error('加载环境失败:', err);
+    }
+    setEnvsLoading(false);
+  };
+
+  // 选择环境
+  const handleSelectEnvironment = (env: PublishedEnvironment) => {
+    setSelectedEnv(env);
+    if (env.latitude && env.longitude && mapRef.current) {
+      mapRef.current.setCenter([env.longitude, env.latitude]);
+      mapRef.current.setZoom(15);
+    }
+  };
 
   // ===== 生命体征测量功能 =====
   const handleStartMeasure = () => {
@@ -144,14 +172,13 @@ export default function ApplicantHomePage() {
               body: JSON.stringify({
                 userId: user.id,
                 company: user.company,
-                environmentName: '默认环境',
+                environmentName: selectedEnv?.name || '默认环境',
                 tcr: data.tcr,
                 tsk: data.tsk,
                 hr: data.hr,
                 timestamp
               })
             });
-            console.log('已记录:', timestamp, data);
           } catch (err) {
             console.error('上传失败:', err);
           }
@@ -191,7 +218,6 @@ export default function ApplicantHomePage() {
       setBluetoothConnected(false);
       return;
     }
-    
     setConnecting(true);
     setTimeout(() => {
       setBluetoothConnected(true);
@@ -261,14 +287,11 @@ export default function ApplicantHomePage() {
 
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',');
-      // 使用CSV中的时间戳，如果不存在则自动生成
       let timestamp: string;
       if (timeIdx >= 0 && cols[timeIdx] && cols[timeIdx].trim()) {
         timestamp = cols[timeIdx].trim();
       } else {
-        // 倒退计算时间（从现在往前推）
-        const backMinutes = (lines.length - i) * 1; // 每条间隔1分钟
-        timestamp = new Date(Date.now() - backMinutes * 60000).toISOString();
+        timestamp = new Date(Date.now() - (lines.length - i) * 60000).toISOString();
       }
       
       if (cols[tcrIdx]) tcr.push({ timestamp, value: parseFloat(cols[tcrIdx]) });
@@ -279,7 +302,7 @@ export default function ApplicantHomePage() {
     return { tcr, tsk, hr };
   };
 
-  // ===== 批量上传数据到服务器 =====
+  // ===== 批量上传数据 =====
   const handleUploadData = async () => {
     if (!user || !filePreview) return;
 
@@ -292,7 +315,6 @@ export default function ApplicantHomePage() {
     const total = filePreview.hr.length;
 
     try {
-      // 批量上传所有数据
       for (let i = 0; i < filePreview.hr.length; i++) {
         const timestamp = filePreview.hr[i].timestamp;
         
@@ -303,7 +325,7 @@ export default function ApplicantHomePage() {
             body: JSON.stringify({
               userId: user.id,
               company: user.company,
-              environmentName: '默认环境',
+              environmentName: selectedEnv?.name || '默认环境',
               tcr: filePreview.tcr[i]?.value,
               tsk: filePreview.tsk[i]?.value,
               hr: filePreview.hr[i]?.value,
@@ -311,11 +333,8 @@ export default function ApplicantHomePage() {
             })
           });
 
-          if (res.ok) {
-            successCount++;
-          } else {
-            failedCount++;
-          }
+          if (res.ok) successCount++;
+          else failedCount++;
         } catch {
           failedCount++;
         }
@@ -323,11 +342,7 @@ export default function ApplicantHomePage() {
         setUploadMessage(`上传中... ${i + 1}/${total}`);
       }
 
-      setUploadResult({
-        success: successCount,
-        failed: failedCount,
-        total
-      });
+      setUploadResult({ success: successCount, failed: failedCount, total });
       setUploadStatus('success');
       setUploadMessage(failedCount === 0 ? '上传成功！' : `上传完成：成功${successCount}条，失败${failedCount}条`);
       
@@ -337,7 +352,6 @@ export default function ApplicantHomePage() {
     }
   };
 
-  // 重新上传
   const handleResetUpload = () => {
     setUploadedFile(null);
     setFilePreview(null);
@@ -402,14 +416,6 @@ export default function ApplicantHomePage() {
     if (el && !mapContainer) {
       setMapContainer(el);
       initMap(el);
-    }
-  };
-
-  // 跳转到环境地图位置
-  const handleJumpToEnvironmentMap = (env: PublishedEnvironment) => {
-    if (env.latitude && env.longitude && mapRef.current) {
-      mapRef.current.setCenter([env.longitude, env.latitude]);
-      mapRef.current.setZoom(15);
     }
   };
 
@@ -583,7 +589,12 @@ export default function ApplicantHomePage() {
   };
 
   // 跳转到环境地图
-  
+  const handleJumpToEnvironmentMap = (env: PublishedEnvironment) => {
+    if (env.latitude && env.longitude && mapRef.current) {
+      mapRef.current.setCenter([env.longitude, env.latitude]);
+      mapRef.current.setZoom(15);
+    }
+  };
 
   if (loading) {
     return (
@@ -624,15 +635,24 @@ export default function ApplicantHomePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {environments.length === 0 ? (
+              {envsLoading ? (
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>加载中...</span>
+                </div>
+              ) : environments.length === 0 ? (
                 <p className="text-gray-400 text-center py-4">暂无可用位置</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {environments.map(env => (
                     <div
                       key={env.id}
-                      className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-all cursor-pointer"
-                      onClick={() => handleJumpToEnvironmentMap(env)}
+                      className={`p-4 rounded-lg border transition-all cursor-pointer ${
+                        selectedEnv?.id === env.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                      onClick={() => handleSelectEnvironment(env)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -749,7 +769,6 @@ export default function ApplicantHomePage() {
 
         {/* ===== 生命体征测量选项卡 ===== */}
         <TabsContent value="vital" className="space-y-4">
-          {/* 上传方式选择 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -758,6 +777,36 @@ export default function ApplicantHomePage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* 环境选择 */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">选择测量环境（可选）</label>
+                {envsLoading ? (
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>加载中...</span>
+                  </div>
+                ) : environments.length === 0 ? (
+                  <p className="text-gray-400 text-sm">暂无可用环境，将使用默认环境</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {environments.map(env => (
+                      <button
+                        key={env.id}
+                        onClick={() => handleSelectEnvironment(env)}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                          selectedEnv?.id === env.id
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <MapPin className="w-4 h-4 mr-1 inline" />
+                        {env.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* 模式切换 */}
               <div className="flex gap-2">
                 <Button
@@ -802,7 +851,6 @@ export default function ApplicantHomePage() {
                     {bluetoothConnected ? '设备已连接，开始测量后将每分钟自动记录数据' : '请先连接蓝牙设备'}
                   </div>
 
-                  {/* 测量控制 */}
                   <div className="flex items-center gap-4">
                     {!isMeasuring ? (
                       <Button 
@@ -828,7 +876,6 @@ export default function ApplicantHomePage() {
                     )}
                   </div>
 
-                  {/* 实时数据展示 */}
                   {isMeasuring && (
                     <div className="grid grid-cols-3 gap-4">
                       <div className="bg-orange-50 rounded-lg p-3 text-center">
@@ -878,7 +925,6 @@ export default function ApplicantHomePage() {
                     </div>
                   )}
 
-                  {/* 上传错误提示 */}
                   {uploadStatus === 'error' && (
                     <div className="p-4 bg-red-50 rounded-lg">
                       <div className="flex items-center gap-3">
@@ -894,7 +940,6 @@ export default function ApplicantHomePage() {
                     </div>
                   )}
 
-                  {/* 上传中状态 */}
                   {uploadStatus === 'uploading' && (
                     <div className="p-4 bg-blue-50 rounded-lg">
                       <div className="flex items-center gap-3">
@@ -949,7 +994,6 @@ export default function ApplicantHomePage() {
                             </div>
                           )}
 
-                          {/* 上传按钮 */}
                           <Button 
                             onClick={handleUploadData} 
                             disabled={!filePreview}
