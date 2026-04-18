@@ -38,11 +38,12 @@ const calculateAge = (birthDate: string): number => {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, company, environmentName, tcr, tsk, hr, timestamp } = body;
+    const { userId, company, environmentName, environmentId, tcr, tsk, hr, timestamp } = body;
 
     console.log('📤 收到生命体征上传请求:', {
       userId,
       environmentName,
+      environmentId,
       tcr,
       tsk,
       hr,
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     });
 
     // 验证必填字段
-    if (!userId || !environmentName || !timestamp) {
+    if (!userId || !timestamp) {
       return NextResponse.json(
         { success: false, message: '缺少必填字段' },
         { status: 400 }
@@ -59,37 +60,20 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseClient();
 
-    // 查找环境ID（如果环境不存在则创建）
-    let envData: any = null;
+    // 如果有传入 environmentId，直接使用
+    let envId = environmentId;
+    let envName = environmentName || '默认环境';
     
-    // 先查找环境
-    const { data: existingEnv } = await supabase
-      .from('environments')
-      .select('id')
-      .eq('name', environmentName)
-      .eq('company', company || '')
-      .single();
-
-    if (existingEnv) {
-      envData = existingEnv;
-    } else {
-      // 创建新环境
-      const { data: newEnv, error: createError } = await supabase
+    if (!envId) {
+      // 先查找环境
+      const { data: existingEnv } = await supabase
         .from('environments')
-        .insert({
-          name: environmentName,
-          company: company || '',
-          user_id: userId
-        })
         .select('id')
+        .eq('name', envName)
+        .eq('company', company || '')
         .single();
-      
-      if (createError) {
-        console.error('创建环境失败:', createError);
-        // 继续使用通用环境ID
-      } else {
-        envData = newEnv;
-      }
+
+      envId = existingEnv?.id || 'default';
     }
 
     // 获取用户信息（用于计算 Mi 和 Tre）
@@ -144,7 +128,7 @@ export async function POST(request: NextRequest) {
         data_type: 'mi',
         value: String(calculatedMi.toFixed(2)),
         recorded_at: recordedAt,
-        environment_id: envData?.id || null,
+        environment_id: envId,
         environment_name: environmentName
       });
     }
@@ -155,7 +139,7 @@ export async function POST(request: NextRequest) {
       data_type: 'tcr',
       value: String(calculatedTcr.toFixed(2)),
       recorded_at: recordedAt,
-      environment_id: envData?.id || null,
+      environment_id: envId,
       environment_name: environmentName
     });
 
@@ -166,7 +150,7 @@ export async function POST(request: NextRequest) {
         data_type: 'tsk',
         value: String(tsk),
         recorded_at: recordedAt,
-        environment_id: envData?.id || null,
+        environment_id: envId,
         environment_name: environmentName
       });
     }
@@ -178,7 +162,7 @@ export async function POST(request: NextRequest) {
         data_type: 'hr',
         value: String(hr),
         recorded_at: recordedAt,
-        environment_id: envData?.id || null,
+        environment_id: envId,
         environment_name: environmentName
       });
     }
