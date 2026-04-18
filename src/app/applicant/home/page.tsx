@@ -405,6 +405,14 @@ export default function ApplicantHomePage() {
     }
   };
 
+  // 跳转到环境地图位置
+  const handleJumpToEnvironmentMap = (env: PublishedEnvironment) => {
+    if (env.latitude && env.longitude && mapRef.current) {
+      mapRef.current.setCenter([env.longitude, env.latitude]);
+      mapRef.current.setZoom(15);
+    }
+  };
+
   // ===== 地区搜索 =====
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -623,11 +631,7 @@ export default function ApplicantHomePage() {
                   {environments.map(env => (
                     <div
                       key={env.id}
-                      className={`p-4 rounded-lg border transition-all cursor-pointer ${
-                        selectedEnv?.id === env.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:bg-gray-50'
-                      }`}
+                      className="p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-all cursor-pointer"
                       onClick={() => handleJumpToEnvironmentMap(env)}
                     >
                       <div className="flex items-start justify-between">
