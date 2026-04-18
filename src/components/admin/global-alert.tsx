@@ -25,6 +25,7 @@ let audioContext: AudioContext | null = null;
 let oscillator: OscillatorNode | null = null;
 let isPlayingAudio = false;
 let debugTimer: NodeJS.Timeout | null = null;
+let checkTimer: NodeJS.Timeout | null = null;
 
 export function GlobalAlertBanner() {
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
@@ -76,72 +77,123 @@ export function GlobalAlertBanner() {
     }
   }, []);
 
+  // 自动检测用户数据
+  const checkUsers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/users?user_id=admin&user_role=admin');
+      const data = await res.json();
+      if (!data.success || !data.users) return;
+      
+      const users: User[] = data.users.filter((u: User) => u.role === 'applicant');
+      const newAlerts: AlertUser[] = [];
+
+      for (const user of users) {
+        const response = await fetch(`/api/vital-data?userId=${user.id}&limit=5`);
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.length > 0) {
+          let latestHr = 0;
+          let latestTcr = 0;
+          
+          for (const record of result.data) {
+            if (record.data_type === 'hr') latestHr = parseFloat(record.value);
+            else if (record.data_type === 'tcr') latestTcr = parseFloat(record.value);
+          }
+          
+          if (latestHr >= 180) {
+            newAlerts.push({ id: user.id, username: user.username, type: 'hr', value: latestHr });
+          }
+          if (latestTcr >= 38) {
+            newAlerts.push({ id: user.id, username: user.username, type: 'tcr', value: latestTcr });
+          }
+        }
+      }
+
+      const hasAlert = newAlerts.length > 0;
+      
+      // 报警开始
+      if (hasAlert && !isAlerting) {
+        setAlertTrigger('start');
+        const hrAlert = newAlerts.find(u => u.type === 'hr');
+        const tcrAlert = newAlerts.find(u => u.type === 'tcr');
+        if (hrAlert) setAlertType(`HR=${hrAlert.value}≥180`);
+        else if (tcrAlert) setAlertType(`Tcr=${tcrAlert.value}≥38`);
+        startBeep();
+        setIsAlerting(true);
+        setAlertUsers(newAlerts);
+        (window as any).__globalAlert = { users: newAlerts, isAlerting: true };
+      }
+      
+      // 报警结束
+      if (!hasAlert && isAlerting) {
+        setAlertTrigger('end');
+        stopBeep();
+        setIsAlerting(false);
+        setAlertUsers([]);
+        (window as any).__globalAlert = { users: [], isAlerting: false };
+        setTimeout(() => setAlertTrigger(null), 3000);
+      }
+      
+    } catch (error) {
+      console.error('检查用户失败:', error);
+    }
+  }, [isAlerting, startBeep, stopBeep]);
+
   // 触发报警（调试用）
   const triggerAlert = useCallback((alert: AlertUser, duration = 10000) => {
     console.log('触发报警:', alert, '持续', duration, 'ms');
     
-    // 清除之前的定时器
-    if (debugTimer) {
-      clearTimeout(debugTimer);
-      debugTimer = null;
-    }
+    if (debugTimer) clearTimeout(debugTimer);
+    if (checkTimer) clearInterval(checkTimer);
     
-    // 更新状态
     setAlertUsers([alert]);
     setIsAlerting(true);
     setAlertTrigger('start');
     setAlertType(alert.type === 'hr' ? `HR=${alert.value}≥180` : `Tcr=${alert.value}≥38`);
-    
-    // 播放声音
     startBeep();
-    
-    // 更新全局状态
     (window as any).__globalAlert = { users: [alert], isAlerting: true };
     
-    // 定时结束
     debugTimer = setTimeout(() => {
       setAlertTrigger('end');
       setIsAlerting(false);
       setAlertUsers([]);
       stopBeep();
       (window as any).__globalAlert = { users: [], isAlerting: false };
-      
-      // 3秒后清除结束状态
       setTimeout(() => setAlertTrigger(null), 3000);
+      
+      // 重新启动自动检测
+      checkTimer = setInterval(checkUsers, 3000);
     }, duration);
-  }, [startBeep, stopBeep]);
+  }, [startBeep, stopBeep, checkUsers]);
 
   // 清除报警
   const clearAlert = useCallback(() => {
     console.log('清除报警');
     
-    if (debugTimer) {
-      clearTimeout(debugTimer);
-      debugTimer = null;
-    }
+    if (debugTimer) clearTimeout(debugTimer);
     
     setAlertTrigger('end');
     setIsAlerting(false);
     setAlertUsers([]);
     stopBeep();
     (window as any).__globalAlert = { users: [], isAlerting: false };
-    
     setTimeout(() => setAlertTrigger(null), 3000);
   }, [stopBeep]);
 
-  // 暴露到 window
+  // 初始化
   useEffect(() => {
+    checkTimer = setInterval(checkUsers, 3000);
     (window as any).__triggerAlert = triggerAlert;
     (window as any).__clearAlert = clearAlert;
     
     return () => {
+      if (checkTimer) clearInterval(checkTimer);
+      if (debugTimer) clearTimeout(debugTimer);
       (window as any).__triggerAlert = undefined;
       (window as any).__clearAlert = undefined;
-      if (debugTimer) clearTimeout(debugTimer);
     };
-  }, [triggerAlert, clearAlert]);
+  }, [triggerAlert, clearAlert, checkUsers]);
 
-  // 不显示时返回 null
   if (!isAlerting && alertTrigger !== 'end') return null;
 
   return (
@@ -164,20 +216,17 @@ export function GlobalAlertBanner() {
                 <span className="text-sm px-3 py-1 rounded bg-yellow-400 text-red-800 font-medium">
                   报警开始（{alertType}）
                 </span>
-                <span>
-                  <strong>{alertUsers[0]?.username}</strong>: 
-                  {alertUsers[0]?.type === 'hr' ? `HR ${alertUsers[0]?.value} bpm` : `Tcr ${alertUsers[0]?.value}°C`}
-                </span>
+                {alertUsers.map((alert, i) => (
+                  <span key={i}>
+                    <strong>{alert.username}</strong>: 
+                    {alert.type === 'hr' ? `HR ${alert.value} bpm` : `Tcr ${alert.value}°C`}
+                  </span>
+                ))}
               </div>
             </>
           )}
         </div>
-        <button 
-          onClick={clearAlert}
-          className="text-white/80 hover:text-white text-2xl leading-none"
-        >
-          ×
-        </button>
+        <button onClick={clearAlert} className="text-white/80 hover:text-white text-2xl leading-none">×</button>
       </div>
     </div>
   );
