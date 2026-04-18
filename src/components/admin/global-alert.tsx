@@ -22,9 +22,6 @@ let cacheTime = 0;
 export function GlobalAlertBanner() {
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
   const [isAlerting, setIsAlerting] = useState(false);
-  const audioRef = useRef<AudioContext | null>(null);
-  const oscillatorRef = useRef<OscillatorNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
   
   const [alertType, setAlertType] = useState<string>('');
   const [alertTrigger, setAlertTrigger] = useState<'start' | 'active' | 'end' | null>(null);
@@ -33,48 +30,29 @@ export function GlobalAlertBanner() {
   const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
   const wasAlertingRef = useRef(false);
 
-  // 播放警报音
-  const startSound = useCallback(() => {
+  // 播放提示音
+  const playBeep = useCallback(() => {
     try {
-      if (!audioRef.current) {
-        audioRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const ctx = audioRef.current;
-      
-      // 停止之前的
-      if (oscillatorRef.current) {
-        oscillatorRef.current.stop();
-        oscillatorRef.current = null;
-      }
-      
-      // 创建持续警报音
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      osc.type = 'square';
-      gain.gain.value = 0.2;
-      
+      osc.frequency.value = 1000;
+      osc.type = 'sine';
+      gain.gain.value = 0.3;
       osc.start();
-      oscillatorRef.current = osc;
-      gainRef.current = gain;
+      setTimeout(() => {
+        osc.stop();
+        ctx.close();
+      }, 300);
     } catch (e) {
       console.error('播放声音失败');
     }
   }, []);
 
-  // 停止警报音
-  const stopSound = useCallback(() => {
-    try {
-      if (oscillatorRef.current) {
-        oscillatorRef.current.stop();
-        oscillatorRef.current = null;
-      }
-    } catch (e) {
-      // 忽略
-    }
-  }, []);
+  // 停止声音（提示音是短促的，不需要停止）
+  const stopSound = useCallback(() => {}, []);
 
   // 检查所有用户
   const checkUsers = useCallback(async () => {
@@ -151,14 +129,14 @@ export function GlobalAlertBanner() {
         const tcrAlert = alertUsers.find(u => u.type === 'tcr');
         if (hrAlert) setAlertType(`HR=${hrAlert.value}≥180`);
         else if (tcrAlert) setAlertType(`Tcr=${tcrAlert.value}≥38`);
-        startSound();
+        playBeep();
       } else if (hasAlert && wasAlertingRef.current) {
         // 报警持续
         setAlertTrigger('active');
       } else if (!hasAlert && wasAlertingRef.current) {
         // 报警结束
         setAlertTrigger('end');
-        stopSound();
+        // 提示音是短促的，不需要停止
       }
       
       wasAlertingRef.current = hasAlert;
@@ -198,9 +176,9 @@ export function GlobalAlertBanner() {
         users: newAlerts,
         isAlerting: true
       };
-      startSound();
+      playBeep();
       
-      // 调试模式：持续指定时间后自动结束
+      // 调试模式：持续10秒后自动结束
       if (debugTimer) clearTimeout(debugTimer);
       debugTimer = setTimeout(() => {
         setAlertTrigger('end');
@@ -210,12 +188,11 @@ export function GlobalAlertBanner() {
           users: [],
           isAlerting: false
         };
-        stopSound();
         // 3秒后清除结束状态
         setTimeout(() => {
           setAlertTrigger(null);
         }, 3000);
-      }, duration);
+      }, 10000);
     };
     
     (window as unknown as { __clearAlert?: () => void }).__clearAlert = () => {
@@ -233,11 +210,10 @@ export function GlobalAlertBanner() {
     return () => {
       clearInterval(interval);
       if (debugTimer) clearTimeout(debugTimer);
-      stopSound();
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__triggerAlert = undefined;
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__clearAlert = undefined;
     };
-  }, [checkUsers, stopSound, startSound]);
+  }, [checkUsers, playBeep]);
 
   if (!isAlerting && alertTrigger !== 'end') return null;
 
