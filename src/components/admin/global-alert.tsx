@@ -193,6 +193,12 @@ export function GlobalAlertBanner() {
       else setAlertType(`Tcr=${alert.value}≥38`);
       playBeep();
       
+      // 更新全局状态
+      (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
+        users: newAlerts,
+        isAlerting: true
+      };
+      
       // 10秒后自动结束
       setTimeout(() => {
         setAlertTrigger('end');
@@ -201,6 +207,13 @@ export function GlobalAlertBanner() {
         isAlertingRef.current = false;
         alertUsersRef.current = [];
         stopBeep();
+        
+        // 更新全局状态
+        (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
+          users: [],
+          isAlerting: false
+        };
+        
         setTimeout(() => setAlertTrigger(null), 3000);
       }, 10000);
     };
@@ -212,6 +225,13 @@ export function GlobalAlertBanner() {
       isAlertingRef.current = false;
       alertUsersRef.current = [];
       stopBeep();
+      
+      // 更新全局状态
+      (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
+        users: [],
+        isAlerting: false
+      };
+      
       setTimeout(() => setAlertTrigger(null), 3000);
     };
     
