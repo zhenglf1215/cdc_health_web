@@ -8,12 +8,13 @@ interface AlertUser {
   username: string;
   type: 'hr' | 'tcr';
   value: number;
+  time: string; // 报警时间（北京时间）
 }
 
 // 报警阈值
 const HR_THRESHOLD = 180;
 const TCR_THRESHOLD = 38;
-const POLL_INTERVAL = 5000;
+const POLL_INTERVAL = 3000; // 每3秒检查一次
 
 // 缓存用户列表
 let cachedUsers: { id: string; username: string; role: string }[] = [];
@@ -24,10 +25,10 @@ export function GlobalAlertBanner() {
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
   
-  // 已触发的报警
-  const triggeredRef = useRef<Set<string>>(new Set());
-  // 上次异常状态
-  const prevAlertRef = useRef<Set<string>>(new Set());
+  // 上次报警的时间（北京时间，格式：YYYY-MM-DD HH:mm）
+  const lastAlertTimeRef = useRef<string>('');
+  // 当前正在显示的报警信息
+  const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
 
   // 播放警报音
   const playSound = useCallback(() => {
@@ -59,9 +60,23 @@ export function GlobalAlertBanner() {
     }
   }, []);
 
-  // 检查所有用户 - 直接从vital_records获取数据
+  // 获取北京时间格式的时间字符串
+  const getBeijingTime = (date: Date): string => {
+    // 北京时间 = UTC时间 + 8小时
+    const beijingOffset = 8 * 60 * 60 * 1000;
+    const beijingTime = new Date(date.getTime() + beijingOffset);
+    const year = beijingTime.getUTCFullYear();
+    const month = String(beijingTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(beijingTime.getUTCDate()).padStart(2, '0');
+    const hour = String(beijingTime.getUTCHours()).padStart(2, '0');
+    const minute = String(beijingTime.getUTCMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hour}:${minute}`;
+  };
+
+  // 检查所有用户
   const checkUsers = useCallback(async () => {
     const now = Date.now();
+    const currentBeijingTime = getBeijingTime(new Date(now));
     
     try {
       // 缓存用户列表（30秒）
@@ -74,64 +89,100 @@ export function GlobalAlertBanner() {
         }
       }
 
-      const today = new Date().toISOString().split('T')[0];
       const newAlerts: AlertUser[] = [];
 
       for (const user of cachedUsers) {
         try {
-          // 直接从vital_records获取最新数据
-          const response = await fetch(`/api/vital-data?userId=${user.id}&timeRange=date:${today}&limit=1`);
+          // 直接从vital_records获取最新数据（按时间降序）
+          const response = await fetch(`/api/vital-data?userId=${user.id}&limit=5`);
           const data = await response.json();
           
           if (data.success && data.records && data.records.length > 0) {
-            // 获取最新的hr和tcr值
             let latestHr = 0;
             let latestTcr = 0;
+            let latestTime = '';
             
+            // 遍历所有记录，找到最新的hr和tcr
             for (const record of data.records) {
-              if (record.data_type === 'hr') {
+              const recordTime = record.recorded_at || record.timestamp || record.created_at;
+              const timeStr = recordTime ? getBeijingTime(new Date(recordTime)) : '';
+              
+              if (record.data_type === 'hr' && !latestHr) {
                 latestHr = parseFloat(record.value);
-              } else if (record.data_type === 'tcr') {
+                latestTime = timeStr;
+              } else if (record.data_type === 'tcr' && !latestTcr) {
                 latestTcr = parseFloat(record.value);
+                if (!latestTime) latestTime = timeStr;
               }
+              
+              // 如果都找到了，退出循环
+              if (latestHr && latestTcr) break;
             }
             
-            // 如果没有数据，跳过
+            // 如果没有有效数据，跳过
             if (latestHr === 0 && latestTcr === 0) continue;
             
             const hrKey = `${user.id}-hr`;
             const tcrKey = `${user.id}-tcr`;
 
+            // 检查是否异常
             const hrIsAlert = latestHr >= HR_THRESHOLD;
             const tcrIsAlert = latestTcr >= TCR_THRESHOLD;
 
-            // HR检查：上次正常 + 本次异常 + 未触发过 → 触发报警
-            const hrPrevAlert = prevAlertRef.current.has(hrKey);
-            if (hrIsAlert && !hrPrevAlert && !triggeredRef.current.has(hrKey)) {
-              triggeredRef.current.add(hrKey);
-              newAlerts.push({ id: user.id, username: user.username, type: 'hr', value: latestHr });
-            }
-
-            // Tcr检查：上次正常 + 本次异常 + 未触发过 → 触发报警
-            const tcrPrevAlert = prevAlertRef.current.has(tcrKey);
-            if (tcrIsAlert && !tcrPrevAlert && !triggeredRef.current.has(tcrKey)) {
-              triggeredRef.current.add(tcrKey);
-              newAlerts.push({ id: user.id, username: user.username, type: 'tcr', value: latestTcr });
-            }
-
-            // 更新上次异常状态
+            // HR报警判断：异常 + 当前分钟未报警过
             if (hrIsAlert) {
-              prevAlertRef.current.add(hrKey);
+              const hrAlertKey = `${hrKey}-${currentBeijingTime}`;
+              if (!currentAlertsRef.current.has(hrAlertKey)) {
+                newAlerts.push({ 
+                  id: user.id, 
+                  username: user.username, 
+                  type: 'hr', 
+                  value: latestHr,
+                  time: latestTime || currentBeijingTime
+                });
+                currentAlertsRef.current.set(hrAlertKey, { 
+                  id: user.id, 
+                  username: user.username, 
+                  type: 'hr', 
+                  value: latestHr,
+                  time: latestTime || currentBeijingTime
+                });
+              }
             } else {
-              prevAlertRef.current.delete(hrKey);
-              triggeredRef.current.delete(hrKey);
+              // HR恢复正常，清除该用户HR的报警记录
+              currentAlertsRef.current.forEach((_, key) => {
+                if (key.startsWith(hrKey)) {
+                  currentAlertsRef.current.delete(key);
+                }
+              });
             }
 
+            // Tcr报警判断：异常 + 当前分钟未报警过
             if (tcrIsAlert) {
-              prevAlertRef.current.add(tcrKey);
+              const tcrAlertKey = `${tcrKey}-${currentBeijingTime}`;
+              if (!currentAlertsRef.current.has(tcrAlertKey)) {
+                newAlerts.push({ 
+                  id: user.id, 
+                  username: user.username, 
+                  type: 'tcr', 
+                  value: latestTcr,
+                  time: latestTime || currentBeijingTime
+                });
+                currentAlertsRef.current.set(tcrAlertKey, { 
+                  id: user.id, 
+                  username: user.username, 
+                  type: 'tcr', 
+                  value: latestTcr,
+                  time: latestTime || currentBeijingTime
+                });
+              }
             } else {
-              prevAlertRef.current.delete(tcrKey);
-              triggeredRef.current.delete(tcrKey);
+              // Tcr恢复正常，清除该用户Tcr的报警记录
+              currentAlertsRef.current.forEach((_, key) => {
+                if (key.startsWith(tcrKey)) {
+                  currentAlertsRef.current.delete(key);
+                }
+              });
             }
           }
         } catch (e) {
@@ -141,11 +192,21 @@ export function GlobalAlertBanner() {
 
       // 触发新报警
       if (newAlerts.length > 0) {
-        setAlertUsers(newAlerts);
+        setAlertUsers(prev => {
+          // 合并现有报警和新报警
+          const merged = new Map<string, AlertUser>();
+          prev.forEach(alert => merged.set(`${alert.id}-${alert.type}`, alert));
+          newAlerts.forEach(alert => merged.set(`${alert.id}-${alert.type}`, alert));
+          return Array.from(merged.values());
+        });
+        
         setShowBanner(true);
         playSound();
-        setTimeout(() => setShowBanner(false), 30000);
+        
+        // 更新上次报警时间
+        lastAlertTimeRef.current = currentBeijingTime;
       }
+
     } catch (error) {
       console.error('检查用户失败:', error);
     }
@@ -169,6 +230,7 @@ export function GlobalAlertBanner() {
               <span key={`${alert.id}-${alert.type}-${index}`}>
                 <strong>{alert.username}</strong>: 
                 {alert.type === 'hr' ? `心率 ${alert.value} bpm` : `核心体温 ${alert.value}°C`} 异常!
+                <span className="text-red-200 ml-1">[{alert.time}]</span>
               </span>
             ))}
           </div>
