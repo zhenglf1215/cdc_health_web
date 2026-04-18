@@ -1148,11 +1148,7 @@ export default function ApplicantHomePage() {
                           {filePreview && (
                             <div className="p-3 bg-green-50 rounded-lg">
                               <p className="text-sm font-medium text-green-700 mb-2">数据预览：</p>
-                              <div className="grid grid-cols-3 gap-2 text-xs">
-                                <div className="text-center p-2 bg-white rounded">
-                                  <p className="text-gray-500">核心温度 Tcr</p>
-                                  <p className="font-bold text-orange-600">{filePreview.tcr.length} 条</p>
-                                </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div className="text-center p-2 bg-white rounded">
                                   <p className="text-gray-500">皮肤温度 Tsk</p>
                                   <p className="font-bold text-green-600">{filePreview.tsk.length} 条</p>
