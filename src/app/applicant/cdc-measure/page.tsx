@@ -237,7 +237,16 @@ export default function CDCMeasurePage() {
       const result = await response.json();
 
       if (result.success) {
-        alert(`CDC计算完成！\n\nTcr CDC: ${result.cdc?.tcr?.toFixed(4) || 'N/A'}\nTsk CDC: ${result.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${result.cdc?.hr?.toFixed(4) || 'N/A'}`);
+        // 构建统计信息
+        const statsInfo = [];
+        for (const type of ['tcr', 'tsk', 'hr'] as const) {
+          if (result.stats && result.stats[`${type}_avg`]) {
+            statsInfo.push(
+              `${type.toUpperCase()}: AV=${result.stats[`${type}_avg`]} AD=${result.stats[`${type}_ad`]} SD=${result.stats[`${type}_sd`]} CV=${result.stats[`${type}_cv`]} COUNT=${result.stats[`${type}_count`]}`
+            );
+          }
+        }
+        alert(`CDC计算完成！\n\n${statsInfo.join('\n')}\n\nCDC值:\nTcr CDC: ${result.cdc?.tcr?.toFixed(4) || 'N/A'}\nTsk CDC: ${result.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${result.cdc?.hr?.toFixed(4) || 'N/A'}`);
         router.push('/applicant');
       } else {
         throw new Error(result.message || 'CDC计算失败');
