@@ -485,9 +485,12 @@ export default function ApplicantHomePage() {
               hr: filePreview.hr[i]?.value || 0
             };
           } else {
+            const errorText = await res.text();
+            console.error(`第${i+1}条上传失败:`, res.status, errorText);
             failedCount++;
           }
-        } catch {
+        } catch (err) {
+          console.error(`第${i+1}条上传异常:`, err);
           failedCount++;
         }
 
@@ -504,7 +507,7 @@ export default function ApplicantHomePage() {
       
       const message = failedCount === 0 
         ? `上传成功！共 ${successCount} 条数据已添加到生命体征图表` 
-        : `上传完成：成功 ${successCount} 条，失败 ${failedCount} 条`;
+        : `上传完成：成功 ${successCount} 条，失败 ${failedCount} 条。请检查浏览器控制台获取详细错误`;
       setUploadMessage(message);
       
       // 添加浏览器alert反馈
