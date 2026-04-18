@@ -103,35 +103,41 @@ export async function POST(request: NextRequest) {
       const dbType = TYPE_MAP[type];
 
       // 保存当前数据的统计值到数据库
-      const { data: existingRecord } = await supabase
+      const { data: existingRecord, error: selectError } = await supabase
         .from('user_environment_stats')
         .select('id')
         .eq('user_id', userId)
         .eq('environment', envName)
         .single();
 
+      if (selectError) {
+        console.error('查询记录失败:', selectError);
+      }
+
       const insertPayload: Record<string, any> = {
         user_id: userId,
         environment: envName,
-        environment_id: environmentId,
+        company: environmentId,
         [`${dbType}_av`]: avg.toFixed(4),
         [`${dbType}_sd`]: sd.toFixed(4),
         [`${dbType}_cv`]: cv.toFixed(4),
         [`${dbType}_ad`]: ad.toFixed(4),
         [`${dbType}_skew`]: skew.toFixed(4),
-        [`${dbType}_count`]: values.length,
-        updated_at: new Date().toISOString()
+        [`${dbType}_count`]: values.length
       };
 
       if (existingRecord) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('user_environment_stats')
           .update(insertPayload)
           .eq('id', existingRecord.id);
+        if (updateError) console.error('更新失败:', updateError);
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('user_environment_stats')
           .insert(insertPayload);
+        if (insertError) console.error('插入失败:', insertError);
+        else console.log('插入成功:', insertPayload);
       }
     }
 
