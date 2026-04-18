@@ -143,30 +143,24 @@ export default function ApplicantHomePage() {
   // ===== 生命体征测量功能 =====
   // 保存CDC测量期间的数据
   const [cdcMeasureData, setCdcMeasureData] = useState<{tcr: number[], tsk: number[], hr: number[]}>({ tcr: [], tsk: [], hr: [] });
-  // 记录是否选择了环境
-  const cdcMeasureEnvRef = useRef<{envId: string, envName: string} | null>(null);
 
   const handleStartMeasure = () => {
-    if (uploadMode === 'bluetooth' && !bluetoothConnected) {
-      alert('请先连接蓝牙设备');
-      return;
-    }
-    
+    // 蓝牙模式必须先连接设备并选择环境
     if (uploadMode === 'bluetooth') {
+      if (!bluetoothConnected) {
+        alert('请先连接蓝牙设备');
+        return;
+      }
+      if (!selectedEnv) {
+        alert('请先选择测量环境');
+        return;
+      }
+      
       setIsMeasuring(true);
       setElapsedTime(0);
-      // 重置CDC测量数据
       setCdcMeasureData({ tcr: [], tsk: [], hr: [] });
       
-      // 记录是否选择了环境（用于决定是否计算CDC）
-      cdcMeasureEnvRef.current = selectedEnv ? {
-        envId: selectedEnv.id,
-        envName: selectedEnv.name
-      } : null;
-      
-      timerRef.current = setInterval(() => {
-        setElapsedTime(t => t + 1);
-      }, 1000);
+      timerRef.current = setInterval(() => setElapsedTime(t => t + 1), 1000);
 
       dataIntervalRef.current = setInterval(async () => {
         const data = {
@@ -178,40 +172,33 @@ export default function ApplicantHomePage() {
         
         if (user) {
           const timestamp = new Date().toISOString();
-          // 环境名称：如果选择了环境就用环境名，否则用"默认环境"
-          const envName = selectedEnv?.name || '默认环境';
-          const envId = selectedEnv?.id || 'default';
           
-          try {
-            await fetch('/api/vital-upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userId: user.id,
-                company: user.company,
-                environmentName: envName,
-                environmentId: envId,
-                tcr: data.tcr,
-                tsk: data.tsk,
-                hr: data.hr,
-                timestamp
-              })
-            });
-            
-            // 如果选择了环境，保存数据用于CDC计算
-            if (cdcMeasureEnvRef.current?.envId) {
-              setCdcMeasureData(prev => ({
-                tcr: [...prev.tcr, data.tcr],
-                tsk: [...prev.tsk, data.tsk],
-                hr: [...prev.hr, data.hr]
-              }));
-            }
-          } catch (err) {
-            console.error('上传失败:', err);
-          }
+          // 写入vital_records（显示在图表）
+          await fetch('/api/vital-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user.id,
+              company: user.company,
+              environmentName: selectedEnv.name,
+              environmentId: selectedEnv.id,
+              tcr: data.tcr,
+              tsk: data.tsk,
+              hr: data.hr,
+              timestamp
+            })
+          });
+          
+          // 保存数据用于CDC计算
+          setCdcMeasureData(prev => ({
+            tcr: [...prev.tcr, data.tcr],
+            tsk: [...prev.tsk, data.tsk],
+            hr: [...prev.hr, data.hr]
+          }));
         }
       }, 60000);
     } else {
+      // 文件上传模式
       if (!filePreview) {
         alert('请先上传数据文件');
         return;
@@ -222,25 +209,21 @@ export default function ApplicantHomePage() {
 
   const handleStopMeasure = async () => {
     setIsMeasuring(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (dataIntervalRef.current) {
-      clearInterval(dataIntervalRef.current);
-      dataIntervalRef.current = null;
-    }
+    clearInterval(timerRef.current!);
+    clearInterval(dataIntervalRef.current!);
+    timerRef.current = null;
+    dataIntervalRef.current = null;
     
-    // 如果选择了环境且有数据，计算CDC
-    if (cdcMeasureEnvRef.current?.envId && user && cdcMeasureData.hr.length > 0) {
+    // 计算CDC
+    if (selectedEnv && user && cdcMeasureData.hr.length > 0) {
       try {
         const res = await fetch('/api/cdc-measure/calculate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: user.id,
-            environmentId: cdcMeasureEnvRef.current.envId,
-            environmentName: cdcMeasureEnvRef.current.envName,
+            environmentId: selectedEnv.id,
+            environmentName: selectedEnv.name,
             tcr: cdcMeasureData.tcr,
             tsk: cdcMeasureData.tsk,
             hr: cdcMeasureData.hr
@@ -248,14 +231,13 @@ export default function ApplicantHomePage() {
         });
         const result = await res.json();
         if (result.success) {
-          alert(`CDC计算完成！\nTcr CDC: ${result.cdc?.tcr?.toFixed(4) || 'N/A'}\nTsk CDC: ${result.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${result.cdc?.hr?.toFixed(4) || 'N/A'}`);
+          alert('CDC计算完成！\nTcr CDC: ' + (result.cdc?.tcr?.toFixed(4) || 'N/A') + '\nTsk CDC: ' + (result.cdc?.tsk?.toFixed(4) || 'N/A') + '\nHR CDC: ' + (result.cdc?.hr?.toFixed(4) || 'N/A'));
         }
       } catch (err) {
         console.error('CDC计算失败:', err);
       }
     }
     
-    cdcMeasureEnvRef.current = null;
     setCdcMeasureData({ tcr: [], tsk: [], hr: [] });
   };
 	
