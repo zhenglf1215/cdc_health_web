@@ -182,20 +182,45 @@ export function GlobalAlertBanner() {
   useEffect(() => {
     checkUsers();
     const interval = setInterval(checkUsers, POLL_INTERVAL);
+    let debugTimer: NodeJS.Timeout | null = null;
     
     // 暴露调试方法到 window
-    (window as unknown as { __triggerAlert?: (alert: AlertUser) => void }).__triggerAlert = (alert: AlertUser) => {
+    (window as unknown as { __triggerAlert?: (alert: AlertUser, duration?: number) => void }).__triggerAlert = (alert: AlertUser, duration = 10000) => {
       const newAlerts = [...alertUsers, alert];
       setIsAlerting(true);
       setAlertUsers(newAlerts);
+      setAlertTrigger('start');
+      const hrAlert = newAlerts.find(u => u.type === 'hr');
+      const tcrAlert = newAlerts.find(u => u.type === 'tcr');
+      if (hrAlert) setAlertType(`HR=${hrAlert.value}≥180`);
+      else if (tcrAlert) setAlertType(`Tcr=${tcrAlert.value}≥38`);
       (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
         users: newAlerts,
         isAlerting: true
       };
       startSound();
+      
+      // 调试模式：持续指定时间后自动结束
+      if (debugTimer) clearTimeout(debugTimer);
+      debugTimer = setTimeout(() => {
+        setAlertTrigger('end');
+        setIsAlerting(false);
+        setAlertUsers([]);
+        (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
+          users: [],
+          isAlerting: false
+        };
+        stopSound();
+        // 3秒后清除结束状态
+        setTimeout(() => {
+          setAlertTrigger(null);
+        }, 3000);
+      }, duration);
     };
     
     (window as unknown as { __clearAlert?: () => void }).__clearAlert = () => {
+      if (debugTimer) clearTimeout(debugTimer);
+      setAlertTrigger('end');
       setIsAlerting(false);
       setAlertUsers([]);
       (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
@@ -207,6 +232,7 @@ export function GlobalAlertBanner() {
     
     return () => {
       clearInterval(interval);
+      if (debugTimer) clearTimeout(debugTimer);
       stopSound();
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__triggerAlert = undefined;
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__clearAlert = undefined;
