@@ -32,7 +32,12 @@ export function GlobalAlertBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
+  
+  // 已触发的报警（报警过一次的指标，清除需等恢复正常）
   const triggeredRef = useRef<Set<string>>(new Set());
+  // 上次异常状态（用于检测状态变化：从正常→异常才触发）
+  const prevAlertRef = useRef<Set<string>>(new Set());
+  
   const soundEndRef = useRef(0);
   const visualEndRef = useRef(0);
 
@@ -91,6 +96,7 @@ export function GlobalAlertBanner() {
 
       const today = new Date().toISOString().split('T')[0];
       const newAlerts: AlertUser[] = [];
+      const currentAlerts: string[] = [];
 
       for (const user of cachedUsers) {
         try {
@@ -117,18 +123,45 @@ export function GlobalAlertBanner() {
               const age = profile.birth_date ? Math.floor((now - new Date(profile.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 30;
               const { tcr } = calculate(hr, age, profile.weight || 65, profile.resting_hr || 65);
 
-              // 检查HR报警
               const hrKey = `${user.id}-hr`;
-              if (hr >= HR_THRESHOLD && !triggeredRef.current.has(hrKey)) {
+              const tcrKey = `${user.id}-tcr`;
+
+              const hrIsAlert = hr >= HR_THRESHOLD;
+              const tcrIsAlert = tcr >= TCR_THRESHOLD;
+
+              // 记录当前异常状态
+              if (hrIsAlert) currentAlerts.push(hrKey);
+              if (tcrIsAlert) currentAlerts.push(tcrKey);
+
+              // HR检查：上次正常 + 本次异常 + 未触发过 → 触发报警
+              const hrPrevAlert = prevAlertRef.current.has(hrKey);
+              if (hrIsAlert && !hrPrevAlert && !triggeredRef.current.has(hrKey)) {
                 triggeredRef.current.add(hrKey);
                 newAlerts.push({ id: user.id, username: user.username, type: 'hr', value: hr });
               }
 
-              // 检查Tcr报警
-              const tcrKey = `${user.id}-tcr`;
-              if (tcr >= TCR_THRESHOLD && !triggeredRef.current.has(tcrKey)) {
+              // TCR检查：上次正常 + 本次异常 + 未触发过 → 触发报警
+              const tcrPrevAlert = prevAlertRef.current.has(tcrKey);
+              if (tcrIsAlert && !tcrPrevAlert && !triggeredRef.current.has(tcrKey)) {
                 triggeredRef.current.add(tcrKey);
                 newAlerts.push({ id: user.id, username: user.username, type: 'tcr', value: tcr });
+              }
+
+              // 更新上次异常状态
+              if (hrIsAlert) {
+                prevAlertRef.current.add(hrKey);
+              } else {
+                prevAlertRef.current.delete(hrKey);
+                // 恢复正常时清除触发记录，下次异常可重新触发
+                triggeredRef.current.delete(hrKey);
+              }
+
+              if (tcrIsAlert) {
+                prevAlertRef.current.add(tcrKey);
+              } else {
+                prevAlertRef.current.delete(tcrKey);
+                // 恢复正常时清除触发记录，下次异常可重新触发
+                triggeredRef.current.delete(tcrKey);
               }
             }
           }
@@ -139,7 +172,10 @@ export function GlobalAlertBanner() {
 
       // 触发新报警
       if (newAlerts.length > 0) {
-        setAlertUsers(prev => [...prev.filter(u => !newAlerts.some(n => n.id === u.id && n.type === u.type)), ...newAlerts]);
+        setAlertUsers(prev => {
+          const filtered = prev.filter(u => !currentAlerts.includes(`${u.id}-${u.type}`));
+          return [...filtered, ...newAlerts];
+        });
         setShowBanner(true);
         if (soundEndRef.current < now) {
           playSound();
@@ -152,9 +188,8 @@ export function GlobalAlertBanner() {
       if (soundEndRef.current > 0 && now >= soundEndRef.current) soundEndRef.current = 0;
       if (visualEndRef.current > 0 && now >= visualEndRef.current) {
         visualEndRef.current = 0;
-        triggeredRef.current.clear();
         setShowBanner(false);
-        setAlertUsers([]);
+        setAlertUsers(prev => prev.filter(u => currentAlerts.includes(`${u.id}-${u.type}`)));
       }
 
     } catch (error) {
@@ -176,7 +211,9 @@ export function GlobalAlertBanner() {
       __clearAlert?: () => void;
       __globalAlert?: { show: boolean; users: AlertUser[]; hrAlert: boolean; tcrAlert: boolean };
     }).__triggerAlert = (alert) => {
-      triggeredRef.current.add(`${alert.id}-${alert.type}`);
+      const key = `${alert.id}-${alert.type}`;
+      triggeredRef.current.add(key);
+      prevAlertRef.current.add(key);
       setAlertUsers(prev => [...prev.filter(u => !(u.id === alert.id && u.type === alert.type)), alert]);
       setShowBanner(true);
       playSound();
@@ -187,6 +224,7 @@ export function GlobalAlertBanner() {
     
     (window as unknown as { __clearAlert?: () => void }).__clearAlert = () => {
       triggeredRef.current.clear();
+      prevAlertRef.current.clear();
       setShowBanner(false);
       setAlertUsers([]);
       soundEndRef.current = 0;
@@ -199,38 +237,49 @@ export function GlobalAlertBanner() {
         show: showBanner,
         users: alertUsers,
         hrAlert: alertUsers.some(u => u.type === 'hr'),
-        tcrAlert: alertUsers.some(u => u.type === 'tcr'),
+        tcrAlert: alertUsers.some(u => u.type === 'tcr')
       };
-    }, 500);
-
+    }, 1000);
     return () => clearInterval(syncInterval);
   }, [showBanner, alertUsers, playSound]);
 
-  if (!showBanner || !alertUsers.length) return null;
-
-  const hrAlerts = alertUsers.filter(u => u.type === 'hr');
-  const tcrAlerts = alertUsers.filter(u => u.type === 'tcr');
+  if (!showBanner || alertUsers.length === 0) return null;
 
   return (
-    <Card className="bg-red-50 border-red-300 animate-pulse mb-4">
-      <CardContent className="p-4 flex items-center gap-3">
-        <AlertTriangle className="w-6 h-6 text-red-600 animate-bounce" />
-        <div className="flex-1">
-          <p className="font-bold text-red-700">报警提醒</p>
-          <div className="flex flex-wrap gap-2 mt-1">
-            {tcrAlerts.map(u => (
-              <span key={`${u.id}-tcr`} className="text-sm bg-red-100 text-red-700 px-2 py-0.5 rounded">
-                ⚠️ {u.username}: {u.value.toFixed(1)}°C ≥ {TCR_THRESHOLD}°C
-              </span>
-            ))}
-            {hrAlerts.map(u => (
-              <span key={`${u.id}-hr`} className="text-sm bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
-                ❤️ {u.username}: {u.value} bpm ≥ {HR_THRESHOLD} bpm
-              </span>
-            ))}
+    <div className="fixed top-0 left-0 right-0 z-[100] bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg">
+      <div className="container mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="animate-pulse">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <span className="font-bold text-lg">实时报警</span>
+          </div>
+          
+          <div className="flex-1 mx-6">
+            <div className="flex flex-wrap gap-4">
+              {alertUsers.map(user => (
+                <div 
+                  key={`${user.id}-${user.type}`}
+                  className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 flex items-center gap-2"
+                >
+                  <span className="font-medium">{user.username}</span>
+                  <span className="text-white/80">|</span>
+                  <span className="font-bold">
+                    {user.type === 'hr' ? (
+                      <>心率 {user.value} bpm</>
+                    ) : (
+                      <>核心体温 {user.value.toFixed(1)}°C</>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+      
+      <audio ref={audioRef} />
+    </div>
   );
 }
