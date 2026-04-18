@@ -77,7 +77,6 @@ export default function CDCMeasurePage() {
   });
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const parsedDataTimestamps = useRef<{tcr: (number | undefined)[], tsk: (number | undefined)[], hr: (number | undefined)[]} | null>(null);
   const dataUploadIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -154,68 +153,39 @@ export default function CDCMeasurePage() {
     setUploadedFile(file);
 
     try {
-      // 读取文件内容
+      // 验证：确保JSON中没有时间戳字段
       const text = await file.text();
+      if (text.includes('timestamp')) {
+        throw new Error('CDC数据不能包含时间戳字段');
+      }
+
       let parsedData: {tcr: number[], tsk: number[], hr: number[]} = { tcr: [], tsk: [], hr: [] };
 
       if (fileExt === '.json') {
-        // JSON格式支持两种：
-        // 1. { "tcr": [36.5, 36.6], ... } - 简单数组
-        // 2. { "tcr": [{timestamp, value}, ...], ... } - 带时间戳的对象数组
+        // JSON格式：只能是简单数组 { "tcr": [...], "tsk": [...], "hr": [...] }
         const jsonData = JSON.parse(text);
-        
-        const parseArray = (arr: any[]): {value: number, timestamp?: number}[] => {
-          if (!Array.isArray(arr)) return [];
-          return arr.map(item => {
-            if (typeof item === 'number') return { value: item };
-            if (typeof item === 'object' && item !== null) {
-              const value = typeof item.value === 'number' ? item.value : parseFloat(item.value);
-              // 解析时间戳
-              let timestamp: number | undefined;
-              if (item.timestamp) {
-                const date = new Date(item.timestamp);
-                if (!isNaN(date.getTime())) {
-                  timestamp = date.getTime();
-                }
-              }
-              return { value, timestamp };
-            }
-            return { value: parseFloat(item) };
-          }).filter(item => !isNaN(item.value));
-        };
-        
-        const tcrData = parseArray(jsonData.tcr);
-        const tskData = parseArray(jsonData.tsk);
-        const hrData = parseArray(jsonData.hr);
-        
         parsedData = {
-          tcr: tcrData.map(d => d.value),
-          tsk: tskData.map(d => d.value),
-          hr: hrData.map(d => d.value)
+          tcr: Array.isArray(jsonData.tcr) ? jsonData.tcr.map((v: number) => parseFloat(String(v))).filter((v: number) => !isNaN(v)) : [],
+          tsk: Array.isArray(jsonData.tsk) ? jsonData.tsk.map((v: number) => parseFloat(String(v))).filter((v: number) => !isNaN(v)) : [],
+          hr: Array.isArray(jsonData.hr) ? jsonData.hr.map((v: number) => parseFloat(String(v))).filter((v: number) => !isNaN(v)) : []
         };
-        
-        // 保存原始时间戳用于上传
-        if (!parsedDataTimestamps.current) {
-          parsedDataTimestamps.current = { tcr: [], tsk: [], hr: [] };
-        }
-        parsedDataTimestamps.current.tcr = tcrData.map(d => d.timestamp);
-        parsedDataTimestamps.current.tsk = tskData.map(d => d.timestamp);
-        parsedDataTimestamps.current.hr = hrData.map(d => d.timestamp);
       } else if (fileExt === '.csv') {
-        // CSV格式：第一列类型，后面是数据值
+        // CSV格式：tcr,tsk,hr 三列
         const lines = text.trim().split('\n');
-        const headers = lines[0].toLowerCase().split(',');
-
-        const tcrIdx = headers.findIndex(h => h.includes('tcr') || h.includes('tcr') || h.includes('core'));
-        const tskIdx = headers.findIndex(h => h.includes('tsk') || h.includes('skin'));
-        const hrIdx = headers.findIndex(h => h.includes('hr') || h.includes('heart'));
-
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(',');
-          if (tcrIdx >= 0 && values[tcrIdx]) parsedData.tcr.push(parseFloat(values[tcrIdx]));
-          if (tskIdx >= 0 && values[tskIdx]) parsedData.tsk.push(parseFloat(values[tskIdx]));
-          if (hrIdx >= 0 && values[hrIdx]) parsedData.hr.push(parseFloat(values[hrIdx]));
-        }
+        const tcrArr: number[] = [], tskArr: number[] = [], hrArr: number[] = [];
+        
+        lines.forEach((line, idx) => {
+          if (idx === 0 && line.toLowerCase().includes('tcr')) return;
+          const cols = line.split(',').map(c => c.trim());
+          const tcr = parseFloat(cols[0]);
+          const tsk = parseFloat(cols[1]);
+          const hr = parseFloat(cols[2]);
+          if (!isNaN(tcr)) tcrArr.push(tcr);
+          if (!isNaN(tsk)) tskArr.push(tsk);
+          if (!isNaN(hr)) hrArr.push(hr);
+        });
+        
+        parsedData = { tcr: tcrArr, tsk: tskArr, hr: hrArr };
       } else {
         setFileError('Excel文件暂不支持，请使用CSV或JSON格式');
         setFileUploading(false);
@@ -239,18 +209,10 @@ export default function CDCMeasurePage() {
     }
   };
 
-  // 从文件数据开始测量
+  // 从文件数据直接计算CDC（不存入vital_records，不显示在图表）
   const startFromFile = async () => {
-    if (!filePreview) {
-      alert('请先上传数据文件');
-      return;
-    }
-    if (!selectedEnv) {
-      alert('请先选择测量环境');
-      return;
-    }
-    if (!user) {
-      alert('请先登录');
+    if (!filePreview || !selectedEnv || !user) {
+      alert('请先上传数据文件并选择测量环境');
       return;
     }
 
@@ -258,86 +220,32 @@ export default function CDCMeasurePage() {
     setFileUploading(true);
 
     try {
-      // 1. 开始CDC测量会话
-      const startResponse = await fetch('/api/cdc-measure/start', {
+      // 直接调用CDC计算接口，传入原始数据
+      const response = await fetch('/api/cdc-measure/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id,
-          environmentId: selectedEnv.id,
-          environmentName: selectedEnv.name
-        })
-      });
-
-      if (!startResponse.ok) {
-        const errData = await startResponse.json();
-        throw new Error(errData.message || '创建测量会话失败');
-      }
-
-      const startData = await startResponse.json();
-      const sessionId = startData.sessionId;
-
-      // 2. 上传文件数据
-      const now = Date.now();
-      const allData: RealtimeData[] = [];
-      const timestamps = parsedDataTimestamps.current;
-
-      filePreview.tcr.forEach((value, index) => {
-        // 优先使用原始时间戳，否则生成伪时间
-        const timestamp = timestamps?.tcr?.[index] || now + index * 60000;
-        allData.push({ type: 'tcr', value, timestamp });
-      });
-      filePreview.tsk.forEach((value, index) => {
-        const timestamp = timestamps?.tsk?.[index] || now + index * 60000;
-        allData.push({ type: 'tsk', value, timestamp });
-      });
-      filePreview.hr.forEach((value, index) => {
-        const timestamp = timestamps?.hr?.[index] || now + index * 60000;
-        allData.push({ type: 'hr', value, timestamp });
-      });
-
-      const dataResponse = await fetch('/api/cdc-measure/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: sessionId,
           userId: user.id,
           environmentId: selectedEnv.id,
           environmentName: selectedEnv.name,
-          data: allData
+          tcr: filePreview.tcr,
+          tsk: filePreview.tsk,
+          hr: filePreview.hr
         })
       });
 
-      if (!dataResponse.ok) {
-        const errData = await dataResponse.json();
-        throw new Error(errData.message || '上传数据失败');
-      }
+      const result = await response.json();
 
-      // 3. 结束CDC测量会话（这会自动计算统计数据并存入user_environment_stats）
-      const stopResponse = await fetch('/api/cdc-measure/stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: sessionId,
-          userId: user.id,
-          environmentId: selectedEnv.id,
-          environmentName: selectedEnv.name
-        })
-      });
-
-      const stopData = await stopResponse.json();
-
-      if (stopData.success) {
-        alert(`数据导入成功！\n\nTcr CDC: ${stopData.cdc?.tcr?.toFixed(4) || 'N/A'}\nTsk CDC: ${stopData.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${stopData.cdc?.hr?.toFixed(4) || 'N/A'}`);
+      if (result.success) {
+        alert(`CDC计算完成！\n\nTcr CDC: ${result.cdc?.tcr?.toFixed(4) || 'N/A'}\nTsk CDC: ${result.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${result.cdc?.hr?.toFixed(4) || 'N/A'}`);
         router.push('/applicant');
       } else {
-        alert('数据已上传，CDC计算待完成');
-        router.push('/applicant');
+        throw new Error(result.message || 'CDC计算失败');
       }
     } catch (error) {
-      console.error('导入数据失败:', error);
-      setFileError(error instanceof Error ? error.message : '导入数据失败，请重试');
-      alert(error instanceof Error ? error.message : '导入数据失败，请重试');
+      console.error('CDC计算失败:', error);
+      setFileError(error instanceof Error ? error.message : 'CDC计算失败，请重试');
+      alert(error instanceof Error ? error.message : 'CDC计算失败，请重试');
     } finally {
       setFileUploading(false);
     }
