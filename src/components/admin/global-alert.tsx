@@ -117,7 +117,7 @@ export function GlobalAlertBanner() {
   }
   
   // 检查所有用户
-  const checkUsers = useCallback(async () => {
+  const checkUsers = useCallback(async (): Promise<void> => {
     const now = Date.now();
     
     try {
