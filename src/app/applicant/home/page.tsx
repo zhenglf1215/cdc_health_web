@@ -141,10 +141,46 @@ export default function ApplicantHomePage() {
   };
 
   // ===== 生命体征测量功能 =====
-  // 保存CDC测量期间的数据
-  const [cdcMeasureData, setCdcMeasureData] = useState<{tcr: number[], tsk: number[], hr: number[]}>({ tcr: [], tsk: [], hr: [] });
+  // 当前CDC会话ID
+  const [cdcSessionId, setCdcSessionId] = useState<string | null>(null);
 
-  const handleStartMeasure = () => {
+  // 蓝牙连接成功后的数据采集（不管是否点击开始测量）
+  const startBluetoothDataCollection = () => {
+    if (dataIntervalRef.current) return;
+    
+    dataIntervalRef.current = setInterval(async () => {
+      const data = {
+        tcr: parseFloat((36.5 + Math.random() * 0.5).toFixed(1)),
+        tsk: parseFloat((33 + Math.random() * 2).toFixed(1)),
+        hr: Math.floor(70 + Math.random() * 15)
+      };
+      setVitalData(data);
+      
+      if (user) {
+        const timestamp = new Date().toISOString();
+        const envName = selectedEnv?.name || '默认环境';
+        const envId = selectedEnv?.id || 'default';
+        
+        // 写入vital_records（显示在图表，触发报警）
+        await fetch('/api/vital-upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            company: user.company,
+            environmentName: envName,
+            environmentId: envId,
+            tcr: data.tcr,
+            tsk: data.tsk,
+            hr: data.hr,
+            timestamp
+          })
+        });
+      }
+    }, 60000);
+  };
+
+  const handleStartMeasure = async () => {
     // 蓝牙模式必须先连接设备并选择环境
     if (uploadMode === 'bluetooth') {
       if (!bluetoothConnected) {
@@ -158,45 +194,30 @@ export default function ApplicantHomePage() {
       
       setIsMeasuring(true);
       setElapsedTime(0);
-      setCdcMeasureData({ tcr: [], tsk: [], hr: [] });
+      
+      // 创建CDC会话记录
+      try {
+        const res = await fetch('/api/cdc-measure/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user!.id,
+            environmentId: selectedEnv.id,
+            environmentName: selectedEnv.name
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setCdcSessionId(data.sessionId);
+        }
+      } catch (err) {
+        console.error('创建CDC会话失败:', err);
+      }
+      
+      // 开始数据采集
+      startBluetoothDataCollection();
       
       timerRef.current = setInterval(() => setElapsedTime(t => t + 1), 1000);
-
-      dataIntervalRef.current = setInterval(async () => {
-        const data = {
-          tcr: parseFloat((36.5 + Math.random() * 0.5).toFixed(1)),
-          tsk: parseFloat((33 + Math.random() * 2).toFixed(1)),
-          hr: Math.floor(70 + Math.random() * 15)
-        };
-        setVitalData(data);
-        
-        if (user) {
-          const timestamp = new Date().toISOString();
-          
-          // 写入vital_records（显示在图表）
-          await fetch('/api/vital-upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: user.id,
-              company: user.company,
-              environmentName: selectedEnv.name,
-              environmentId: selectedEnv.id,
-              tcr: data.tcr,
-              tsk: data.tsk,
-              hr: data.hr,
-              timestamp
-            })
-          });
-          
-          // 保存数据用于CDC计算
-          setCdcMeasureData(prev => ({
-            tcr: [...prev.tcr, data.tcr],
-            tsk: [...prev.tsk, data.tsk],
-            hr: [...prev.hr, data.hr]
-          }));
-        }
-      }, 60000);
     } else {
       // 文件上传模式
       if (!filePreview) {
@@ -210,23 +231,25 @@ export default function ApplicantHomePage() {
   const handleStopMeasure = async () => {
     setIsMeasuring(false);
     clearInterval(timerRef.current!);
-    clearInterval(dataIntervalRef.current!);
     timerRef.current = null;
-    dataIntervalRef.current = null;
     
-    // 计算CDC
-    if (selectedEnv && user && cdcMeasureData.hr.length > 0) {
+    // 停止数据采集（可选，保持连接）
+    if (dataIntervalRef.current && !bluetoothConnected) {
+      clearInterval(dataIntervalRef.current);
+      dataIntervalRef.current = null;
+    }
+    
+    // 结束CDC会话（自动查询时间范围内的数据计算CDC）
+    if (cdcSessionId && selectedEnv && user) {
       try {
-        const res = await fetch('/api/cdc-measure/calculate', {
+        const res = await fetch('/api/cdc-measure/stop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            sessionId: cdcSessionId,
             userId: user.id,
             environmentId: selectedEnv.id,
-            environmentName: selectedEnv.name,
-            tcr: cdcMeasureData.tcr,
-            tsk: cdcMeasureData.tsk,
-            hr: cdcMeasureData.hr
+            environmentName: selectedEnv.name
           })
         });
         const result = await res.json();
@@ -238,7 +261,7 @@ export default function ApplicantHomePage() {
       }
     }
     
-    setCdcMeasureData({ tcr: [], tsk: [], hr: [] });
+    setCdcSessionId(null);
   };
 	
   const formatTime = (seconds: number) => {
@@ -251,13 +274,20 @@ export default function ApplicantHomePage() {
   // ===== 蓝牙连接 =====
   const handleConnectBluetooth = () => {
     if (bluetoothConnected) {
+      // 断开蓝牙，停止数据采集
       setBluetoothConnected(false);
+      if (dataIntervalRef.current) {
+        clearInterval(dataIntervalRef.current);
+        dataIntervalRef.current = null;
+      }
       return;
     }
     setConnecting(true);
     setTimeout(() => {
       setBluetoothConnected(true);
       setConnecting(false);
+      // 连接成功后开始数据采集（不管是否点击开始测量）
+      startBluetoothDataCollection();
     }, 1500);
   };
 
