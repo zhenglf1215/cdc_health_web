@@ -76,8 +76,27 @@ export default function CDCMeasurePage() {
     hr: 0
   });
   
+  // Mi和Tcr递推状态（用于HR→Mi→Tcr递推）
+  const miTcrStateRef = useRef({ currentMi: 65, currentTcr: 36.8 });
+  
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const dataUploadIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 计算劳动代谢率 Mi（基于HR、年龄、体重）
+  const calculateMi = (hr: number, age: number = 30, weight: number = 65, restingHr: number = 65): number => {
+    const weightKg = weight;
+    const weightSurface = Math.pow(weightKg, 2 / 3);
+    const mi = 65 + ((hr - restingHr) / (180 - 0.65 * age - restingHr)) * ((41.7 - 0.22 * age) * weightSurface - 65);
+    return Math.max(30, Math.min(600, mi));
+  };
+
+  // 计算核心体温 Tcr（基于Mi递推）
+  const calculateTcrFromMi = (currentMi: number, prevTcr: number): number => {
+    const efficiencyFactor = 0.0952;
+    const deltaTcr = 0.0036 * (currentMi - 55) * efficiencyFactor;
+    const newTcr = prevTcr + deltaTcr;
+    return Math.max(35, Math.min(40, newTcr));
+  };
 
   useEffect(() => {
     const checkAuth = () => {
@@ -124,14 +143,30 @@ export default function CDCMeasurePage() {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // 模拟实时数据生成（实际应该从蓝牙设备获取）
+  // 模拟实时数据生成（基于HR→Mi→Tcr递推）
   const generateSimulatedData = useCallback((): RealtimeData[] => {
+    // 模拟采集HR和TSK
+    const hr = Math.floor(70 + Math.random() * 20);
+    const tsk = parseFloat((33 + Math.random() * 2).toFixed(1));
+    
+    // 获取用户体重
+    const age = 30;
+    const weight = user?.weight ? parseFloat(user.weight) : 65;
+    
+    // HR → Mi 递推计算
+    const currentMi = calculateMi(hr, age, weight);
+    miTcrStateRef.current.currentMi = currentMi;
+    
+    // Mi → Tcr 递推计算
+    const currentTcr = calculateTcrFromMi(currentMi, miTcrStateRef.current.currentTcr);
+    miTcrStateRef.current.currentTcr = currentTcr;
+    
     return [
-      { type: 'tcr', value: parseFloat((36.5 + Math.random() * 0.8).toFixed(1)), timestamp: Date.now() },
-      { type: 'tsk', value: parseFloat((33 + Math.random() * 2).toFixed(1)), timestamp: Date.now() },
-      { type: 'hr', value: Math.floor(70 + Math.random() * 20), timestamp: Date.now() }
+      { type: 'tcr', value: currentTcr, timestamp: Date.now() },
+      { type: 'tsk', value: tsk, timestamp: Date.now() },
+      { type: 'hr', value: hr, timestamp: Date.now() }
     ];
-  }, []);
+  }, [user]);
 
   // 处理文件上传
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -283,6 +318,9 @@ export default function CDCMeasurePage() {
         setCurrentStep('measuring');
         setElapsedTime(0);
         setVitalRecords([]);
+        
+        // 重置Mi和Tcr递推状态
+        miTcrStateRef.current = { currentMi: 65, currentTcr: 36.8 };
 
         // 启动计时器
         timerRef.current = setInterval(() => {

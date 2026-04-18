@@ -58,6 +58,9 @@ export default function ApplicantHomePage() {
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [vitalData, setVitalData] = useState({ tcr: 0, tsk: 0, hr: 0 });
+
+  // 蓝牙测量：Mi和Tcr递推状态（用于HR→Mi→Tcr递推）
+  const miTcrStateRef = useRef({ currentMi: 65, currentTcr: 36.8 });
   
   // 蓝牙状态
   const [bluetoothConnected, setBluetoothConnected] = useState(false);
@@ -144,16 +147,49 @@ export default function ApplicantHomePage() {
   // 当前CDC会话ID
   const [cdcSessionId, setCdcSessionId] = useState<string | null>(null);
 
+  // 计算劳动代谢率 Mi（基于HR、年龄、体重）
+  const calculateMi = (hr: number, age: number = 30, weight: number = 65, restingHr: number = 65): number => {
+    // Mi = 65 + (HR - HRrest) / (180 - 0.65×Age - HRrest) × [(41.7 - 0.22×Age) × W^(2/3) - 65]
+    const weightKg = weight;
+    const weightSurface = Math.pow(weightKg, 2 / 3); // 体表面积相关
+    const mi = 65 + ((hr - restingHr) / (180 - 0.65 * age - restingHr)) * ((41.7 - 0.22 * age) * weightSurface - 65);
+    return Math.max(30, Math.min(600, mi)); // 限制范围
+  };
+
+  // 计算核心体温 Tcr（基于Mi递推）
+  const calculateTcrFromMi = (currentMi: number, prevTcr: number): number => {
+    // Tcr(t+1) = Tcr(t) + 0.0036 × (Mi - 55) × 0.0952
+    const efficiencyFactor = 0.0952;
+    const deltaTcr = 0.0036 * (currentMi - 55) * efficiencyFactor;
+    const newTcr = prevTcr + deltaTcr;
+    return Math.max(35, Math.min(40, newTcr)); // 限制范围
+  };
+
   // 蓝牙连接成功后的数据采集（不管是否点击开始测量）
   const startBluetoothDataCollection = () => {
     if (dataIntervalRef.current) return;
     
+    // 重置递推状态
+    miTcrStateRef.current = { currentMi: 65, currentTcr: 36.8 };
+    
     dataIntervalRef.current = setInterval(async () => {
-      const data = {
-        tcr: parseFloat((36.5 + Math.random() * 0.5).toFixed(1)),
-        tsk: parseFloat((33 + Math.random() * 2).toFixed(1)),
-        hr: Math.floor(70 + Math.random() * 15)
-      };
+      // 模拟采集HR和TSK
+      const hr = Math.floor(70 + Math.random() * 15);
+      const tsk = parseFloat((33 + Math.random() * 2).toFixed(1));
+      
+      // 获取用户信息用于Mi计算
+      const age = 30; // 默认值
+      const weight = user?.weight ? parseFloat(user.weight) : 65;
+      
+      // HR → Mi 递推计算
+      const currentMi = calculateMi(hr, age, weight);
+      miTcrStateRef.current.currentMi = currentMi;
+      
+      // Mi → Tcr 递推计算
+      const currentTcr = calculateTcrFromMi(currentMi, miTcrStateRef.current.currentTcr);
+      miTcrStateRef.current.currentTcr = currentTcr;
+      
+      const data = { tcr: currentTcr, tsk, hr };
       setVitalData(data);
       
       if (user) {
