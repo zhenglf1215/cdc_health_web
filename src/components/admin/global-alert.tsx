@@ -84,7 +84,8 @@ export function GlobalAlertBanner() {
       const data = await res.json();
       if (!data.success || !data.users) return;
       
-      const users: User[] = data.users.filter((u: User) => u.role === 'applicant');
+      // 检测所有用户，不限制角色
+      const users: User[] = data.users;
       const newAlerts: AlertUser[] = [];
 
       for (const user of users) {
