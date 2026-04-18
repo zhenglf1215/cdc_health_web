@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 interface VitalData {
-  type: 'tre' | 'tcr' | 'tsk' | 'hr';
+  type: 'tcr' | 'tsk' | 'hr';
   value: number;
   timestamp: number;
 }

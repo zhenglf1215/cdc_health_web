@@ -95,7 +95,7 @@ export default function ApplicantPage() {
         const cdcResponse = await fetch(`/api/cdc-calculate?user_id=${userData.id}&perspective=user`);
         if (cdcResponse.ok) {
           const cdcData = await cdcResponse.json();
-          setCdcData(cdcData.cdc || { hr: 0, tre: 0, tsk: 0 });
+          setCdcData(cdcData.cdc || { hr: 0, tcr: 0, tsk: 0 });
         }
       } catch (error) {
         console.error('加载测试数据失败:', error);
@@ -153,7 +153,7 @@ export default function ApplicantPage() {
       const cdcResponse = await fetch(`/api/cdc-calculate?user_id=${userData.id}&perspective=user`);
       if (cdcResponse.ok) {
         const cdcData = await cdcResponse.json();
-        setCdcData(cdcData.cdc || { hr: 0, tre: 0, tsk: 0 });
+        setCdcData(cdcData.cdc || { hr: 0, tcr: 0, tsk: 0 });
       }
     } catch (error) {
       console.error('加载测试数据失败:', error);
@@ -431,7 +431,7 @@ export default function ApplicantPage() {
                         <tr className="bg-purple-600 text-white">
                           <th className="px-6 py-3 text-left font-medium border border-purple-700">参与环境</th>
                           <th className="px-6 py-3 text-center font-medium border border-purple-700">cdc-hr</th>
-                          <th className="px-6 py-3 text-center font-medium border border-purple-700">cdc-tre</th>
+                          <th className="px-6 py-3 text-center font-medium border border-purple-700">cdc-tcr</th>
                           <th className="px-6 py-3 text-center font-medium border border-purple-700">cdc-tsk</th>
                         </tr>
                       </thead>

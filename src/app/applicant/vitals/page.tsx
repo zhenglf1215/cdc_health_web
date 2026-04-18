@@ -44,7 +44,7 @@ export default function VitalsLayout() {
                       {tab.label}
                     </span>
                     <span className="text-xs text-gray-500">
-                      {tab.id === 'tre' ? '核心温度' : tab.id === 'tsk' ? '皮肤温度' : '心率'}
+                      {tab.id === 'tcr' ? '核心温度' : tab.id === 'tsk' ? '皮肤温度' : '心率'}
                     </span>
                   </div>
                 </Card>

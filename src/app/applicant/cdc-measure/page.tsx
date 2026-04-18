@@ -170,7 +170,7 @@ export default function CDCMeasurePage() {
         const lines = text.trim().split('\n');
         const headers = lines[0].toLowerCase().split(',');
 
-        const tcrIdx = headers.findIndex(h => h.includes('tcr') || h.includes('tre') || h.includes('core'));
+        const tcrIdx = headers.findIndex(h => h.includes('tcr') || h.includes('tcr') || h.includes('core'));
         const tskIdx = headers.findIndex(h => h.includes('tsk') || h.includes('skin'));
         const hrIdx = headers.findIndex(h => h.includes('hr') || h.includes('heart'));
 
@@ -287,7 +287,7 @@ export default function CDCMeasurePage() {
       const stopData = await stopResponse.json();
 
       if (stopData.success) {
-        alert(`数据导入成功！\n\nTcr CDC: ${stopData.cdc?.tre?.toFixed(4) || 'N/A'}\nTsk CDC: ${stopData.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${stopData.cdc?.hr?.toFixed(4) || 'N/A'}`);
+        alert(`数据导入成功！\n\nTcr CDC: ${stopData.cdc?.tcr?.toFixed(4) || 'N/A'}\nTsk CDC: ${stopData.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${stopData.cdc?.hr?.toFixed(4) || 'N/A'}`);
         router.push('/applicant');
       } else {
         alert('数据已上传，CDC计算待完成');
@@ -406,7 +406,7 @@ export default function CDCMeasurePage() {
       setIsMeasuring(false);
       
       // 显示完成信息
-      alert(`CDC测量完成！\n时长：${formatTime(elapsedTime)}\n数据点数：${vitalRecords.length}\nCDC值：HR=${result.cdc?.hr?.toFixed(4) || 0}, Tre=${result.cdc?.tre?.toFixed(4) || 0}, Tsk=${result.cdc?.tsk?.toFixed(4) || 0}`);
+      alert(`CDC测量完成！\n时长：${formatTime(elapsedTime)}\n数据点数：${vitalRecords.length}\nCDC值：HR=${result.cdc?.hr?.toFixed(4) || 0}, Tre=${result.cdc?.tcr?.toFixed(4) || 0}, Tsk=${result.cdc?.tsk?.toFixed(4) || 0}`);
       
       // 返回选择环境页面
       setCurrentStep('environment');

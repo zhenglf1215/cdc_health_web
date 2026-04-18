@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'CDC测量已结束，但无数据',
-        cdc: { hr: 0, tre: 0, tsk: 0 }
+        cdc: { hr: 0, tcr: 0, tsk: 0 }
       });
     }
 
@@ -103,8 +103,8 @@ export async function POST(request: NextRequest) {
     const groupedStats: Record<string, { values: number[]; environment_id: string; environment_name: string; data_type: string }> = {};
     
     sessionRecords.forEach((item) => {
-      // 将 tcr 映射为 tre（统一命名）
-      const key = item.data_type === 'tcr' ? 'tre' : item.data_type;
+      // 不需要映射，统一使用 tcr
+      const key = item.data_type;
       if (!groupedStats[key]) {
         groupedStats[key] = {
           values: [],
@@ -118,14 +118,14 @@ export async function POST(request: NextRequest) {
 
     // 计算每个数据类型的统计数据
     const updateData: Record<string, string | number> = {};
-    const cdcInputData: Record<'hr' | 'tre' | 'tsk', { av: number; ad: number; cv: number; skew: number }[]> = {
-      hr: [], tre: [], tsk: []
+    const cdcInputData: Record<'hr' | 'tcr' | 'tsk', { av: number; ad: number; cv: number; skew: number }[]> = {
+      hr: [], tcr: [], tsk: []
     };
 
     for (const key in groupedStats) {
       const group = groupedStats[key];
       const values = group.values;
-      const dataType = key as 'hr' | 'tre' | 'tsk';
+      const dataType = key as 'hr' | 'tcr' | 'tsk';
 
       const avg = values.reduce((a, b) => a + b, 0) / values.length;
       const variance = values.reduce((acc, val) => acc + Math.pow(val - avg, 2), 0) / values.length;
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     // 计算CDC值
     const cdcResult: Record<string, number> = {};
-    for (const type of ['hr', 'tre', 'tsk'] as const) {
+    for (const type of ['hr', 'tcr', 'tsk'] as const) {
       cdcResult[type] = calculateSingleCDC(cdcInputData[type]);
     }
 
