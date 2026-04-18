@@ -84,12 +84,13 @@ export async function POST(request: NextRequest) {
       .eq('id', sessionId);
 
     // 获取该CDC测量期间的生命体征数据（从vital_records中筛选）
+    // 改为只通过 environment_id 筛选，不依赖时间范围
     const { data: sessionRecords, error: recordsError } = await supabase
       .from('vital_records')
       .select('data_type, value, environment_id, environment_name, recorded_at')
       .eq('environment_id', sessionData.environment_id)
-      .gte('recorded_at', sessionData.start_time)
-      .lte('recorded_at', new Date(endTime || Date.now()).toISOString());
+      .eq('user_id', sessionData.user_id)
+      .order('recorded_at', { ascending: true });
 
     if (recordsError || !sessionRecords || sessionRecords.length === 0) {
       return NextResponse.json({

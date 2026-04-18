@@ -77,6 +77,7 @@ export default function CDCMeasurePage() {
   });
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const parsedDataTimestamps = useRef<{tcr: (number | undefined)[], tsk: (number | undefined)[], hr: (number | undefined)[]} | null>(null);
   const dataUploadIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -163,22 +164,43 @@ export default function CDCMeasurePage() {
         // 2. { "tcr": [{timestamp, value}, ...], ... } - 带时间戳的对象数组
         const jsonData = JSON.parse(text);
         
-        const parseArray = (arr: any[]): number[] => {
+        const parseArray = (arr: any[]): {value: number, timestamp?: number}[] => {
           if (!Array.isArray(arr)) return [];
           return arr.map(item => {
-            if (typeof item === 'number') return item;
+            if (typeof item === 'number') return { value: item };
             if (typeof item === 'object' && item !== null) {
-              return typeof item.value === 'number' ? item.value : parseFloat(item.value);
+              const value = typeof item.value === 'number' ? item.value : parseFloat(item.value);
+              // 解析时间戳
+              let timestamp: number | undefined;
+              if (item.timestamp) {
+                const date = new Date(item.timestamp);
+                if (!isNaN(date.getTime())) {
+                  timestamp = date.getTime();
+                }
+              }
+              return { value, timestamp };
             }
-            return parseFloat(item);
-          }).filter(v => !isNaN(v));
+            return { value: parseFloat(item) };
+          }).filter(item => !isNaN(item.value));
         };
         
+        const tcrData = parseArray(jsonData.tcr);
+        const tskData = parseArray(jsonData.tsk);
+        const hrData = parseArray(jsonData.hr);
+        
         parsedData = {
-          tcr: parseArray(jsonData.tcr),
-          tsk: parseArray(jsonData.tsk),
-          hr: parseArray(jsonData.hr)
+          tcr: tcrData.map(d => d.value),
+          tsk: tskData.map(d => d.value),
+          hr: hrData.map(d => d.value)
         };
+        
+        // 保存原始时间戳用于上传
+        if (!parsedDataTimestamps.current) {
+          parsedDataTimestamps.current = { tcr: [], tsk: [], hr: [] };
+        }
+        parsedDataTimestamps.current.tcr = tcrData.map(d => d.timestamp);
+        parsedDataTimestamps.current.tsk = tskData.map(d => d.timestamp);
+        parsedDataTimestamps.current.hr = hrData.map(d => d.timestamp);
       } else if (fileExt === '.csv') {
         // CSV格式：第一列类型，后面是数据值
         const lines = text.trim().split('\n');
@@ -258,15 +280,20 @@ export default function CDCMeasurePage() {
       // 2. 上传文件数据
       const now = Date.now();
       const allData: RealtimeData[] = [];
+      const timestamps = parsedDataTimestamps.current;
 
       filePreview.tcr.forEach((value, index) => {
-        allData.push({ type: 'tcr', value, timestamp: now + index * 60000 });
+        // 优先使用原始时间戳，否则生成伪时间
+        const timestamp = timestamps?.tcr?.[index] || now + index * 60000;
+        allData.push({ type: 'tcr', value, timestamp });
       });
       filePreview.tsk.forEach((value, index) => {
-        allData.push({ type: 'tsk', value, timestamp: now + index * 60000 });
+        const timestamp = timestamps?.tsk?.[index] || now + index * 60000;
+        allData.push({ type: 'tsk', value, timestamp });
       });
       filePreview.hr.forEach((value, index) => {
-        allData.push({ type: 'hr', value, timestamp: now + index * 60000 });
+        const timestamp = timestamps?.hr?.[index] || now + index * 60000;
+        allData.push({ type: 'hr', value, timestamp });
       });
 
       const dataResponse = await fetch('/api/cdc-measure/data', {
