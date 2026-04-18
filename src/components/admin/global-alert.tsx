@@ -218,43 +218,22 @@ export function GlobalAlertBanner() {
   // 报警结束状态显示3秒后消失
   const showEndState = alertTrigger === 'end' && isAlerting === false;
 
-  // 呼吸效果样式
-  const bgStyle: React.CSSProperties = showEndState ? {} : {
-    animation: 'breathe-bg 1.5s ease-in-out infinite'
-  };
-  
-  const iconStyle: React.CSSProperties = showEndState ? {} : {
-    animation: 'breathe-icon 1.5s ease-in-out infinite'
-  };
-
   return (
-    <>
-      {/* 呼吸动画样式 */}
-      <style>{`
-        @keyframes breathe-bg {
-          0%, 100% { background-color: #dc2626; }
-          50% { background-color: #b91c1c; }
-        }
-        @keyframes breathe-icon {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(0.9); }
-        }
-      `}</style>
-      
-      <div 
-        style={showEndState ? { backgroundColor: '#16a34a' } : bgStyle}
-        className="fixed top-0 left-0 right-0 z-[100] px-4 py-3 shadow-lg text-white"
-      >
-        <div className="container mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {showEndState ? (
-              <>
-                <span className="text-xl">✅</span>
-                <span className="text-lg font-medium">报警结束</span>
-              </>
-            ) : (
-              <>
-                <AlertTriangle style={iconStyle} className="w-6 h-6" />
+    <div 
+      className={`fixed top-0 left-0 right-0 z-[100] px-4 py-3 shadow-lg text-white animate-pulse ${
+        showEndState ? 'bg-green-600' : 'bg-red-600'
+      }`}
+    >
+      <div className="container mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {showEndState ? (
+            <>
+              <span className="text-xl">✅</span>
+              <span className="text-lg font-medium">报警结束</span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="w-6 h-6" />
               <div className="flex items-center gap-4">
                 <span className={`text-sm px-3 py-1 rounded ${
                   alertTrigger === 'start' 
