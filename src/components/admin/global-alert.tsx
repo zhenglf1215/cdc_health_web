@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 interface AlertUser {
@@ -10,277 +10,208 @@ interface AlertUser {
   value: number;
 }
 
-// 报警阈值
-const HR_THRESHOLD = 180;
-const TCR_THRESHOLD = 38;
-const POLL_INTERVAL = 3000;
+interface User {
+  id: string;
+  username: string;
+  company: string;
+  phone: string;
+  role: string;
+  created_at: string;
+  last_login: string;
+}
 
-// 缓存用户列表
-let cachedUsers: { id: string; username: string; role: string }[] = [];
-let cacheTime = 0;
+const POLL_INTERVAL = 3000; // 3秒轮询
 
 export function GlobalAlertBanner() {
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
   const [isAlerting, setIsAlerting] = useState(false);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const oscRef = useRef<OscillatorNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
-  
   const [alertType, setAlertType] = useState<string>('');
   const [alertTrigger, setAlertTrigger] = useState<'start' | 'active' | 'end' | null>(null);
 
-  // 记录当前异常的用户
-  const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
-  const wasAlertingRef = useRef(false);
-  const playBeepRef = useRef<() => void>(() => {});
-  const stopBeepRef = useRef<() => void>(() => {});
-  
-  // 播放提示音（持续蜂鸣）
+  // 音频 refs
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const oscRef = useRef<OscillatorNode | null>(null);
+  const isPlayingRef = useRef(false);
+  const initializedRef = useRef(false);
+
+  // 播放声音
   const playBeep = useCallback(() => {
-    console.log('playBeep 被调用');
-    
-    // 如果已经在播放，不要重复启动
-    if (oscRef.current && audioCtxRef.current) {
-      console.log('声音已在播放中，跳过');
-      return;
-    }
+    if (isPlayingRef.current) return;
     
     try {
-      // 停止之前的
-      if (oscRef.current) {
-        try { oscRef.current.stop(); } catch {}
-        oscRef.current = null;
-      }
-      if (audioCtxRef.current) {
-        try { audioCtxRef.current.close(); } catch {}
-        audioCtxRef.current = null;
-      }
-      
-      // 创建 AudioContext
-      const AudioCtx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext);
-      if (!AudioCtx) {
-        console.log('浏览器不支持AudioContext');
-        return;
-      }
+      const AudioCtx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+      if (!AudioCtx) return;
       
       const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.frequency.value = 1000;
+      osc.type = 'sine';
+      gain.gain.value = 0.3;
+      
+      osc.start();
+      
       audioCtxRef.current = ctx;
-      console.log('AudioContext创建成功');
-      
-      // 创建振荡器
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
-      oscillator.frequency.value = 1000;
-      oscillator.type = 'sine';
-      gainNode.gain.value = 0.3;
-      
-      oscillator.start();
-      oscRef.current = oscillator;
-      gainRef.current = gainNode;
-      
-      console.log('声音开始播放，频率1000Hz');
-      playBeepRef.current = playBeep;
-      stopBeepRef.current = stopBeep;
-    } catch (e: unknown) {
-      console.error('播放声音失败:', e);
+      oscRef.current = osc;
+      isPlayingRef.current = true;
+    } catch (e) {
+      console.error('播放声音失败', e);
     }
   }, []);
-  
+
   // 停止声音
   const stopBeep = useCallback(() => {
-    console.log('stopBeep 被调用');
+    if (!isPlayingRef.current) return;
+    
     try {
       if (oscRef.current) {
-        try { oscRef.current.stop(); } catch {}
+        oscRef.current.stop();
         oscRef.current = null;
       }
       if (audioCtxRef.current) {
-        try { audioCtxRef.current.close(); } catch {}
+        audioCtxRef.current.close();
         audioCtxRef.current = null;
       }
-      console.log('声音停止');
+      isPlayingRef.current = false;
     } catch (e) {
       // 忽略
     }
   }, []);
 
-  // 初始化函数 ref
-  const initializedRef = useRef(false);
-  if (!initializedRef.current) {
-    playBeepRef.current = playBeep;
-    stopBeepRef.current = stopBeep;
-    initializedRef.current = true;
-  }
-  
-  // 检查所有用户
-  const checkUsers = useCallback(async (): Promise<void> => {
-    const now = Date.now();
-    
+  // 检查用户数据
+  const checkUsers = useCallback(async () => {
     try {
-      // 缓存用户列表（30秒）
-      if (!cachedUsers.length || now - cacheTime > 30000) {
-        const res = await fetch('/api/users?user_id=admin&user_role=admin');
-        const data = await res.json();
-        if (data.success && data.users) {
-          cachedUsers = data.users.filter((u: { role: string }) => u.role === 'applicant');
-          cacheTime = now;
-        }
-      }
+      // 获取所有用户
+      const res = await fetch('/api/users?user_id=admin&user_role=admin');
+      const data = await res.json();
+      
+      if (!data.success || !data.users) return;
+      
+      const users: User[] = data.users.filter((u: User) => u.role === 'applicant');
+      const newAlerts: AlertUser[] = [];
 
-      const newAlerts: Map<string, AlertUser> = new Map();
-
-      for (const user of cachedUsers) {
-        try {
-          // 从vital_records获取最新数据
-          const response = await fetch(`/api/vital-data?userId=${user.id}&limit=5`);
-          const data = await response.json();
+      for (const user of users) {
+        const response = await fetch(`/api/vital-data?userId=${user.id}&limit=5`);
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.length > 0) {
+          let latestHr = 0;
+          let latestTcr = 0;
           
-          if (data.success && data.data && data.data.length > 0) {
-            let latestHr = 0;
-            let latestTcr = 0;
-            
-            // 获取最新的hr和tcr
-            for (const record of data.data) {
-              if (record.data_type === 'hr') {
-                latestHr = parseFloat(record.value);
-              } else if (record.data_type === 'tcr') {
-                latestTcr = parseFloat(record.value);
-              }
-            }
-            
-            if (latestHr === 0 && latestTcr === 0) continue;
-
-            // HR检查
-            if (latestHr >= HR_THRESHOLD) {
-              newAlerts.set(`${user.id}-hr`, { 
-                id: user.id, 
-                username: user.username, 
-                type: 'hr', 
-                value: latestHr 
-              });
-            }
-
-            // Tcr检查
-            if (latestTcr >= TCR_THRESHOLD) {
-              newAlerts.set(`${user.id}-tcr`, { 
-                id: user.id, 
-                username: user.username, 
-                type: 'tcr', 
-                value: latestTcr 
-              });
+          for (const record of result.data) {
+            if (record.data_type === 'hr') {
+              latestHr = parseFloat(record.value);
+            } else if (record.data_type === 'tcr') {
+              latestTcr = parseFloat(record.value);
             }
           }
-        } catch (e) {
-          console.error(`检查用户 ${user.username} 失败:`, e);
+          
+          // 检查报警条件
+          if (latestHr >= 180) {
+            newAlerts.push({
+              id: user.id,
+              username: user.username,
+              type: 'hr',
+              value: latestHr
+            });
+          }
+          
+          if (latestTcr >= 38) {
+            newAlerts.push({
+              id: user.id,
+              username: user.username,
+              type: 'tcr',
+              value: latestTcr
+            });
+          }
         }
       }
 
-      // 更新报警状态
-      const hasAlert = newAlerts.size > 0;
-      const alertUsers = Array.from(newAlerts.values());
+      const hasAlert = newAlerts.length > 0;
       
-      // 判断报警状态变化
-      if (hasAlert && !wasAlertingRef.current) {
-        // 报警开始：播放持续声音
+      // 报警开始
+      if (hasAlert && !isAlerting) {
         setAlertTrigger('start');
-        const hrAlert = alertUsers.find(u => u.type === 'hr');
-        const tcrAlert = alertUsers.find(u => u.type === 'tcr');
+        const hrAlert = newAlerts.find(u => u.type === 'hr');
+        const tcrAlert = newAlerts.find(u => u.type === 'tcr');
         if (hrAlert) setAlertType(`HR=${hrAlert.value}≥180`);
         else if (tcrAlert) setAlertType(`Tcr=${tcrAlert.value}≥38`);
         playBeep();
-      } else if (hasAlert && wasAlertingRef.current) {
-        // 报警持续
-        setAlertTrigger('active');
-      } else if (!hasAlert && wasAlertingRef.current) {
-        // 报警结束：停止声音
-        setAlertTrigger('end');
-        stopBeep();
       }
       
-      wasAlertingRef.current = hasAlert;
-      setIsAlerting(hasAlert);
-      setAlertUsers(alertUsers);
+      // 报警结束
+      if (!hasAlert && isAlerting) {
+        setAlertTrigger('end');
+        stopBeep();
+        setTimeout(() => setAlertTrigger(null), 3000);
+      }
       
-      // 同步到 window 供其他组件使用
+      setIsAlerting(hasAlert);
+      setAlertUsers(newAlerts);
+      
+      // 同步到 window
       (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
-        users: alertUsers,
+        users: newAlerts,
         isAlerting
       };
-
-      // 更新当前报警引用
-      currentAlertsRef.current = newAlerts;
-
+      
     } catch (error) {
       console.error('检查用户失败:', error);
     }
-  }, [checkUsers]);
+  }, [isAlerting, playBeep, stopBeep]);
 
+  // 初始化
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    
     checkUsers();
     const interval = setInterval(checkUsers, POLL_INTERVAL);
-    let debugTimer: NodeJS.Timeout | null = null;
     
-    // 暴露调试方法到 window
-    (window as unknown as { __triggerAlert?: (alert: AlertUser, duration?: number) => void }).__triggerAlert = (alert: AlertUser, duration = 10000) => {
+    // 暴露调试方法
+    (window as unknown as { __triggerAlert?: (alert: AlertUser) => void }).__triggerAlert = (alert: AlertUser) => {
       const newAlerts = [...alertUsers, alert];
       setIsAlerting(true);
       setAlertUsers(newAlerts);
       setAlertTrigger('start');
-      const hrAlert = newAlerts.find(u => u.type === 'hr');
-      const tcrAlert = newAlerts.find(u => u.type === 'tcr');
-      if (hrAlert) setAlertType(`HR=${hrAlert.value}≥180`);
-      else if (tcrAlert) setAlertType(`Tcr=${tcrAlert.value}≥38`);
-      (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
-        users: newAlerts,
-        isAlerting: true
-      };
+      if (alert.type === 'hr') setAlertType(`HR=${alert.value}≥180`);
+      else setAlertType(`Tcr=${alert.value}≥38`);
       playBeep();
-      // 调试模式：持续10秒后自动结束（声音同步停止）
-      if (debugTimer) clearTimeout(debugTimer);
-      debugTimer = setTimeout(() => {
+      
+      // 10秒后自动结束
+      setTimeout(() => {
         setAlertTrigger('end');
         setIsAlerting(false);
         setAlertUsers([]);
-        stopBeep(); // 声音同步停止
-        (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
-          users: [],
-          isAlerting: false
-        };
-        // 3秒后清除结束状态
-        setTimeout(() => {
-          setAlertTrigger(null);
-        }, 3000);
+        stopBeep();
+        setTimeout(() => setAlertTrigger(null), 3000);
       }, 10000);
     };
     
     (window as unknown as { __clearAlert?: () => void }).__clearAlert = () => {
-      if (debugTimer) clearTimeout(debugTimer);
       setAlertTrigger('end');
       setIsAlerting(false);
       setAlertUsers([]);
-      (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
-        users: [],
-        isAlerting: false
-      };
-      stopBeep(); // 声音同步停止
+      stopBeep();
+      setTimeout(() => setAlertTrigger(null), 3000);
     };
     
     return () => {
       clearInterval(interval);
-      if (debugTimer) clearTimeout(debugTimer);
-      (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__triggerAlert = undefined;
-      (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__clearAlert = undefined;
+      stopBeep();
+      (window as unknown as { __triggerAlert?: undefined }).__triggerAlert = undefined;
+      (window as unknown as { __clearAlert?: undefined }).__clearAlert = undefined;
     };
-  }, []);
+  }, [checkUsers, playBeep, stopBeep, alertUsers]);
+
+  // 显示结束状态
+  const showEndState = alertTrigger === 'end' && !isAlerting;
 
   if (!isAlerting && alertTrigger !== 'end') return null;
-
-  // 报警结束状态显示3秒后消失
-  const showEndState = alertTrigger === 'end' && isAlerting === false;
 
   return (
     <div 
@@ -332,13 +263,4 @@ export function GlobalAlertBanner() {
       </div>
     </div>
   );
-}
-
-// 导出呼吸报警状态供其他组件使用
-export function useAlertState() {
-  const [isAlerting, setIsAlerting] = useState(false);
-  const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
-  
-  // 这个可以在其他组件中使用
-  return { isAlerting, alertUsers };
 }
