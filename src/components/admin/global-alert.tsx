@@ -22,6 +22,9 @@ let cacheTime = 0;
 export function GlobalAlertBanner() {
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
   const [isAlerting, setIsAlerting] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const oscRef = useRef<OscillatorNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
   
   const [alertType, setAlertType] = useState<string>('');
   const [alertTrigger, setAlertTrigger] = useState<'start' | 'active' | 'end' | null>(null);
@@ -30,10 +33,21 @@ export function GlobalAlertBanner() {
   const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
   const wasAlertingRef = useRef(false);
 
-  // 播放提示音
+  // 播放提示音（持续）
   const playBeep = useCallback(() => {
     try {
+      // 停止之前的
+      if (oscRef.current) {
+        oscRef.current.stop();
+        oscRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+      }
+      
       const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      audioCtxRef.current = ctx;
+      
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -42,17 +56,29 @@ export function GlobalAlertBanner() {
       osc.type = 'sine';
       gain.gain.value = 0.3;
       osc.start();
-      setTimeout(() => {
-        osc.stop();
-        ctx.close();
-      }, 300);
+      
+      oscRef.current = osc;
+      gainRef.current = gain;
     } catch (e) {
       console.error('播放声音失败');
     }
   }, []);
 
-  // 停止声音（提示音是短促的，不需要停止）
-  const stopSound = useCallback(() => {}, []);
+  // 停止声音
+  const stopBeep = useCallback(() => {
+    try {
+      if (oscRef.current) {
+        oscRef.current.stop();
+        oscRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
+    } catch (e) {
+      // 忽略
+    }
+  }, []);
 
   // 检查所有用户
   const checkUsers = useCallback(async () => {
@@ -123,7 +149,7 @@ export function GlobalAlertBanner() {
       
       // 判断报警状态变化
       if (hasAlert && !wasAlertingRef.current) {
-        // 报警开始
+        // 报警开始：播放持续声音
         setAlertTrigger('start');
         const hrAlert = alertUsers.find(u => u.type === 'hr');
         const tcrAlert = alertUsers.find(u => u.type === 'tcr');
@@ -134,9 +160,9 @@ export function GlobalAlertBanner() {
         // 报警持续
         setAlertTrigger('active');
       } else if (!hasAlert && wasAlertingRef.current) {
-        // 报警结束
+        // 报警结束：停止声音
         setAlertTrigger('end');
-        // 提示音是短促的，不需要停止
+        stopBeep();
       }
       
       wasAlertingRef.current = hasAlert;
@@ -177,13 +203,13 @@ export function GlobalAlertBanner() {
         isAlerting: true
       };
       playBeep();
-      
-      // 调试模式：持续10秒后自动结束
+      // 调试模式：持续10秒后自动结束（声音同步停止）
       if (debugTimer) clearTimeout(debugTimer);
       debugTimer = setTimeout(() => {
         setAlertTrigger('end');
         setIsAlerting(false);
         setAlertUsers([]);
+        stopBeep(); // 声音同步停止
         (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
           users: [],
           isAlerting: false
@@ -204,16 +230,17 @@ export function GlobalAlertBanner() {
         users: [],
         isAlerting: false
       };
-      stopSound();
+      stopBeep(); // 声音同步停止
     };
     
     return () => {
       clearInterval(interval);
       if (debugTimer) clearTimeout(debugTimer);
+      stopBeep();
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__triggerAlert = undefined;
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__clearAlert = undefined;
     };
-  }, [checkUsers, playBeep]);
+  }, [checkUsers, playBeep, stopBeep]);
 
   if (!isAlerting && alertTrigger !== 'end') return null;
 
