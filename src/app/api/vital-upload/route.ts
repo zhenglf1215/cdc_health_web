@@ -73,7 +73,18 @@ export async function POST(request: NextRequest) {
         .eq('company', company || '')
         .single();
 
-      envId = existingEnv?.id || 'default';
+      if (existingEnv?.id) {
+        envId = existingEnv.id;
+      } else {
+        // 如果找不到指定环境，查找任意一个可用环境
+        const { data: anyEnv } = await supabase
+          .from('environments')
+          .select('id')
+          .limit(1)
+          .single();
+        
+        envId = anyEnv?.id || null;
+      }
     }
 
     // 获取用户信息（用于计算 Mi 和 Tre）
