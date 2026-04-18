@@ -145,10 +145,13 @@ export async function POST(request: NextRequest) {
       cdcInputData[dataType].push({ av: avg, ad, cv, skew });
     }
 
-    // 更新cdc_sessions表的统计数据
+    // 更新cdc_sessions表状态
     await supabase
       .from('cdc_sessions')
-      .update(updateData)
+      .update({
+        status: 'completed',
+        end_time: new Date().toISOString()
+      })
       .eq('id', sessionId);
 
     // 计算CDC值
@@ -157,7 +160,7 @@ export async function POST(request: NextRequest) {
       cdcResult[type] = calculateSingleCDC(cdcInputData[type]);
     }
 
-    // 同步到 user_environment_stats 表（用于CDC计算）
+    // 同步到 user_environment_stats 表（统计数据+CDC值）
     const envName = sessionData.environment_name;
     
     for (const [type, value] of Object.entries(updateData)) {
@@ -171,15 +174,22 @@ export async function POST(request: NextRequest) {
           .eq('environment', envName)
           .single();
 
+        const updatePayload: Record<string, any> = {
+          [`${dataType}_av`]: value,
+          [`${dataType}_sd`]: updateData[`${dataType}_sd`],
+          [`${dataType}_cv`]: updateData[`${dataType}_cv`],
+          updated_at: new Date().toISOString()
+        };
+        
+        // CDC值也保存
+        if (cdcResult[dataType] !== undefined) {
+          updatePayload[`${dataType}_cdc`] = cdcResult[dataType];
+        }
+
         if (existingRecord) {
           await supabase
             .from('user_environment_stats')
-            .update({
-              [`${dataType}_av`]: value,
-              [`${dataType}_sd`]: updateData[`${dataType}_sd`],
-              [`${dataType}_cv`]: updateData[`${dataType}_cv`],
-              updated_at: new Date().toISOString()
-            })
+            .update(updatePayload)
             .eq('id', existingRecord.id);
         } else {
           await supabase
@@ -188,10 +198,7 @@ export async function POST(request: NextRequest) {
               user_id: sessionData.user_id,
               environment: envName,
               environment_id: sessionData.environment_id,
-              [`${dataType}_av`]: value,
-              [`${dataType}_sd`]: updateData[`${dataType}_sd`],
-              [`${dataType}_cv`]: updateData[`${dataType}_cv`],
-              updated_at: new Date().toISOString()
+              ...updatePayload
             });
         }
       }
