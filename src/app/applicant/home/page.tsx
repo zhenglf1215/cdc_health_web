@@ -38,7 +38,7 @@ interface PublishedEnvironment {
 }
 
 interface UploadedData {
-  tcr: { timestamp: string; value: number }[];
+  tcr?: { timestamp: string; value: number }[];
   tsk: { timestamp: string; value: number }[];
   hr: { timestamp: string; value: number }[];
 }
