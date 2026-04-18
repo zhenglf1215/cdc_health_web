@@ -1,26 +1,11 @@
 {
-  "tcr": [
-    { "timestamp": "2026-04-18T08:26:00.000Z", "value": 36.8 },
-    { "timestamp": "2026-04-18T08:27:00.000Z", "value": 37.0 },
-    { "timestamp": "2026-04-18T08:28:00.000Z", "value": 37.2 },
-    { "timestamp": "2026-04-18T08:29:00.000Z", "value": 38.3 },
-    { "timestamp": "2026-04-18T08:30:00.000Z", "value": 38.6 },
-    { "timestamp": "2026-04-18T08:31:00.000Z", "value": 37.8 }
-  ],
-  "tsk": [
-    { "timestamp": "2026-04-18T08:26:00.000Z", "value": 33.5 },
-    { "timestamp": "2026-04-18T08:27:00.000Z", "value": 33.7 },
-    { "timestamp": "2026-04-18T08:28:00.000Z", "value": 33.9 },
-    { "timestamp": "2026-04-18T08:29:00.000Z", "value": 34.2 },
-    { "timestamp": "2026-04-18T08:30:00.000Z", "value": 34.5 },
-    { "timestamp": "2026-04-18T08:31:00.000Z", "value": 34.0 }
-  ],
-  "hr": [
-    { "timestamp": "2026-04-18T08:26:00.000Z", "value": 75 },
-    { "timestamp": "2026-04-18T08:27:00.000Z", "value": 80 },
-    { "timestamp": "2026-04-18T08:28:00.000Z", "value": 85 },
-    { "timestamp": "2026-04-18T08:29:00.000Z", "value": 88 },
-    { "timestamp": "2026-04-18T08:30:00.000Z", "value": 92 },
-    { "timestamp": "2026-04-18T08:31:00.000Z", "value": 86 }
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "records": [
+    { "type": "hr", "value": 185, "timestamp": "2026-04-18T10:22:00.000Z" },
+    { "type": "hr", "value": 185, "timestamp": "2026-04-18T10:23:00.000Z" },
+    { "type": "hr", "value": 185, "timestamp": "2026-04-18T10:24:00.000Z" },
+    { "type": "hr", "value": 185, "timestamp": "2026-04-18T10:25:00.000Z" },
+    { "type": "hr", "value": 185, "timestamp": "2026-04-18T10:26:00.000Z" },
+    { "type": "hr", "value": 185, "timestamp": "2026-04-18T10:27:00.000Z" }
   ]
 }
