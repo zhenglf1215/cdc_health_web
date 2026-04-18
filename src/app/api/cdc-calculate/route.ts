@@ -140,6 +140,27 @@ export async function GET(request: NextRequest) {
         success: true,
         cdc: cdcResult,
         environmentCount: stats.length,
+        environments: stats.map(s => ({
+          environment: s.environment,
+          tcr_av: s.tcr_av,
+          tcr_ad: s.tcr_ad,
+          tcr_sd: s.tcr_sd,
+          tcr_cv: s.tcr_cv,
+          tcr_skew: s.tcr_skew,
+          tcr_count: s.tcr_count,
+          tsk_av: s.tsk_av,
+          tsk_ad: s.tsk_ad,
+          tsk_sd: s.tsk_sd,
+          tsk_cv: s.tsk_cv,
+          tsk_skew: s.tsk_skew,
+          tsk_count: s.tsk_count,
+          hr_av: s.hr_av,
+          hr_ad: s.hr_ad,
+          hr_sd: s.hr_sd,
+          hr_cv: s.hr_cv,
+          hr_skew: s.hr_skew,
+          hr_count: s.hr_count,
+        }))
       });
     } 
     else if (perspective === 'environment') {

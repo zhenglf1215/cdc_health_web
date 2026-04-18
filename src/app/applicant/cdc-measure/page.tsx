@@ -78,6 +78,15 @@ export default function CDCMeasurePage() {
   
   // Mi和Tcr递推状态（用于HR→Mi→Tcr递推）
   const miTcrStateRef = useRef({ currentMi: 65, currentTcr: 36.8 });
+
+  // 历史统计数据
+  const [historyStats, setHistoryStats] = useState<Record<string, {
+    tcr_av: string; tcr_ad: string; tcr_sd: string; tcr_cv: string;
+    tsk_av: string; tsk_ad: string; tsk_sd: string; tsk_cv: string;
+    hr_av: string; hr_ad: string; hr_sd: string; hr_cv: string;
+    tcr_count: number; tsk_count: number; hr_count: number;
+    environment: string;
+  }>>({});
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const dataUploadIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -114,6 +123,7 @@ export default function CDCMeasurePage() {
       
       setUser(userData);
       loadEnvironments(userData.id);
+      loadHistoryStats(userData.id);
       setLoading(false);
     };
 
@@ -132,6 +142,46 @@ export default function CDCMeasurePage() {
       console.error('加载环境列表失败:', error);
     } finally {
       setEnvsLoading(false);
+    }
+  };
+
+  // 加载用户历史统计数据
+  const loadHistoryStats = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/cdc-calculate?perspective=user&user_id=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.users) {
+          const statsMap: Record<string, any> = {};
+          for (const user of data.users) {
+            if (user.environments && user.environments.length > 0) {
+              for (const env of user.environments) {
+                statsMap[env.environment] = {
+                  tcr_av: env.tcr_av || '--',
+                  tcr_ad: env.tcr_ad || '--',
+                  tcr_sd: env.tcr_sd || '--',
+                  tcr_cv: env.tcr_cv || '--',
+                  tsk_av: env.tsk_av || '--',
+                  tsk_ad: env.tsk_ad || '--',
+                  tsk_sd: env.tsk_sd || '--',
+                  tsk_cv: env.tsk_cv || '--',
+                  hr_av: env.hr_av || '--',
+                  hr_ad: env.hr_ad || '--',
+                  hr_sd: env.hr_sd || '--',
+                  hr_cv: env.hr_cv || '--',
+                  tcr_count: env.tcr_count || 0,
+                  tsk_count: env.tsk_count || 0,
+                  hr_count: env.hr_count || 0,
+                  environment: env.environment
+                };
+              }
+            }
+          }
+          setHistoryStats(statsMap);
+        }
+      }
+    } catch (error) {
+      console.error('加载历史统计数据失败:', error);
     }
   };
 
@@ -272,6 +322,11 @@ export default function CDCMeasurePage() {
       const result = await response.json();
 
       if (result.success) {
+        // 刷新历史统计数据
+        if (user) {
+          loadHistoryStats(user.id);
+        }
+        
         // 构建统计信息
         const statsInfo = [];
         for (const type of ['tcr', 'tsk', 'hr'] as const) {
@@ -282,7 +337,10 @@ export default function CDCMeasurePage() {
           }
         }
         alert(`CDC计算完成！\n\n${statsInfo.join('\n')}\n\nCDC值:\nTcr CDC: ${result.cdc?.tcr?.toFixed(4) || 'N/A'}\nTsk CDC: ${result.cdc?.tsk?.toFixed(4) || 'N/A'}\nHR CDC: ${result.cdc?.hr?.toFixed(4) || 'N/A'}`);
-        router.push('/applicant');
+        
+        // 上传成功后重置状态并返回环境选择
+        setCurrentStep('environment');
+        setSelectedEnv(null);
       } else {
         throw new Error(result.message || 'CDC计算失败');
       }
@@ -739,6 +797,43 @@ export default function CDCMeasurePage() {
                     </button>
                   </div>
                 </div>
+
+                {/* 历史统计数据 */}
+                {Object.keys(historyStats).length > 0 && (
+                  <div className="mt-4 p-4 bg-green-50 rounded-xl">
+                    <h4 className="font-medium text-green-800 mb-3 flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      历史测量记录
+                    </h4>
+                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                      {Object.entries(historyStats).map(([envName, stats]) => (
+                        <div key={envName} className="p-3 bg-white rounded-lg">
+                          <p className="font-medium text-gray-800 mb-2">{envName}</p>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="p-2 bg-orange-50 rounded">
+                              <p className="text-orange-600 font-medium">核心体温 Tcr</p>
+                              <p>AV: {stats.tcr_av}</p>
+                              <p>AD: {stats.tcr_ad}</p>
+                              <p>CV: {stats.tcr_cv}%</p>
+                            </div>
+                            <div className="p-2 bg-teal-50 rounded">
+                              <p className="text-teal-600 font-medium">皮肤温度 Tsk</p>
+                              <p>AV: {stats.tsk_av}</p>
+                              <p>AD: {stats.tsk_ad}</p>
+                              <p>CV: {stats.tsk_cv}%</p>
+                            </div>
+                            <div className="p-2 bg-red-50 rounded">
+                              <p className="text-red-600 font-medium">心率 HR</p>
+                              <p>AV: {stats.hr_av}</p>
+                              <p>AD: {stats.hr_ad}</p>
+                              <p>CV: {stats.hr_cv}%</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 flex gap-3">
