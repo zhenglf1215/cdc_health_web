@@ -181,7 +181,7 @@ export function GlobalAlertBanner() {
     } catch (error) {
       console.error('检查用户失败:', error);
     }
-  }, [isAlerting, startSound, stopSound]);
+  }, [isAlerting, playBeep, stopBeep]);
 
   useEffect(() => {
     checkUsers();
