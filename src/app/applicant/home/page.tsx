@@ -82,6 +82,44 @@ export default function ApplicantHomePage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const dataIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 用户profile信息（用于Mi计算）
+  const [userProfile, setUserProfile] = useState<{
+    weight?: number;
+    birthDate?: string;
+    restingHr?: number;
+  }>({});
+
+  // 从birth_date计算年龄
+  const calculateAge = (birthDate: string): number => {
+    const birth = new Date(birthDate);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // 加载用户profile
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/user-profile?user_id=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          setUserProfile({
+            weight: data.data.weight ? parseFloat(data.data.weight) : undefined,
+            birthDate: data.data.birth_date,
+            restingHr: data.data.resting_hr ? parseInt(data.data.resting_hr) : undefined
+          });
+        }
+      }
+    } catch (error) {
+      console.error('加载用户profile失败:', error);
+    }
+  };
+
   // ===== 地图状态 =====
   const [mapContainer, setMapContainer] = useState<HTMLElement | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -118,6 +156,7 @@ export default function ApplicantHomePage() {
     }
     setUser(userData);
     loadEnvironments(userData.id);
+    loadUserProfile(userData.id);
     setLoading(false);
   }, [router]);
 
@@ -177,12 +216,13 @@ export default function ApplicantHomePage() {
       const hr = Math.floor(70 + Math.random() * 15);
       const tsk = parseFloat((33 + Math.random() * 2).toFixed(1));
       
-      // 获取用户信息用于Mi计算
-      const age = 30; // 默认值
-      const weight = user?.weight ? parseFloat(user.weight) : 65;
+      // 从用户profile获取参数用于Mi计算
+      const age = userProfile.birthDate ? calculateAge(userProfile.birthDate) : 30;
+      const weight = userProfile.weight || 65;
+      const restingHr = userProfile.restingHr || 65;
       
       // HR → Mi 递推计算
-      const currentMi = calculateMi(hr, age, weight);
+      const currentMi = calculateMi(hr, age, weight, restingHr);
       miTcrStateRef.current.currentMi = currentMi;
       
       // Mi → Tcr 递推计算

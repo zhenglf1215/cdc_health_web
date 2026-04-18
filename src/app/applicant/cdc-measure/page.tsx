@@ -87,9 +87,28 @@ export default function CDCMeasurePage() {
     tcr_count: number; tsk_count: number; hr_count: number;
     environment: string;
   }>>({});
-  
+
+  // 用户profile信息（用于Mi计算）
+  const [userProfile, setUserProfile] = useState<{
+    weight?: number;
+    birthDate?: string;
+    restingHr?: number;
+  }>({});
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const dataUploadIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 从birth_date计算年龄
+  const calculateAge = (birthDate: string): number => {
+    const birth = new Date(birthDate);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
 
   // 计算劳动代谢率 Mi（基于HR、年龄、体重）
   const calculateMi = (hr: number, age: number = 30, weight: number = 65, restingHr: number = 65): number => {
@@ -124,6 +143,10 @@ export default function CDCMeasurePage() {
       setUser(userData);
       loadEnvironments(userData.id);
       loadHistoryStats(userData.id);
+      
+      // 加载用户profile（用于Mi计算）
+      loadUserProfile(userData.id);
+      
       setLoading(false);
     };
 
@@ -142,6 +165,26 @@ export default function CDCMeasurePage() {
       console.error('加载环境列表失败:', error);
     } finally {
       setEnvsLoading(false);
+    }
+  };
+
+  // 加载用户profile（用于Mi计算）
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/user-profile?user_id=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          const profile = data.data;
+          setUserProfile({
+            weight: profile.weight ? parseFloat(profile.weight) : undefined,
+            birthDate: profile.birth_date,
+            restingHr: profile.resting_hr ? parseInt(profile.resting_hr) : undefined
+          });
+        }
+      }
+    } catch (error) {
+      console.error('加载用户profile失败:', error);
     }
   };
 
@@ -199,12 +242,13 @@ export default function CDCMeasurePage() {
     const hr = Math.floor(70 + Math.random() * 20);
     const tsk = parseFloat((33 + Math.random() * 2).toFixed(1));
     
-    // 获取用户体重（使用默认值）
-    const age = 30;
-    const weight = 65;
+    // 从用户profile获取参数（用于Mi计算）
+    const age = userProfile.birthDate ? calculateAge(userProfile.birthDate) : 30;
+    const weight = userProfile.weight || 65;
+    const restingHr = userProfile.restingHr || 65;
     
     // HR → Mi 递推计算
-    const currentMi = calculateMi(hr, age, weight);
+    const currentMi = calculateMi(hr, age, weight, restingHr);
     miTcrStateRef.current.currentMi = currentMi;
     
     // Mi → Tcr 递推计算
@@ -216,7 +260,7 @@ export default function CDCMeasurePage() {
       { type: 'tsk', value: tsk, timestamp: Date.now() },
       { type: 'hr', value: hr, timestamp: Date.now() }
     ];
-  }, [user]);
+  }, [userProfile]);
 
   // 处理文件上传
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
