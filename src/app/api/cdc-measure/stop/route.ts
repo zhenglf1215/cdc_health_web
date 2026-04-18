@@ -137,9 +137,11 @@ export async function POST(request: NextRequest) {
       const ad = sd;
       const skew = calculateSkew(values, avg, sd);
 
-      updateData[`${dataType}_avg`] = avg.toFixed(2);
-      updateData[`${dataType}_sd`] = sd.toFixed(2);
-      updateData[`${dataType}_cv`] = cv.toFixed(2);
+      updateData[`${dataType}_avg`] = avg.toFixed(4);
+      updateData[`${dataType}_sd`] = sd.toFixed(4);
+      updateData[`${dataType}_cv`] = cv.toFixed(4);
+      updateData[`${dataType}_ad`] = ad.toFixed(4);
+      updateData[`${dataType}_skew`] = skew.toFixed(4);
       updateData[`${dataType}_count`] = values.length;
 
       cdcInputData[dataType].push({ av: avg, ad, cv, skew });

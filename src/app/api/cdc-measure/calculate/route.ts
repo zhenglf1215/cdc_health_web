@@ -1,24 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
-// 计算偏度
+// 归一化函数
+function normalize(value: number, min: number, max: number): number {
+  if (max === min) return 0;
+  return (value - min) / (max - min);
+}
+
+// 计算单维度CDC
+function calculateSingleCDC(stats: { av: number; ad: number; cv: number; skew: number }[]): number {
+  if (stats.length < 2) return 0;
+
+  const m = stats.length;
+  const n = 3; // AD, CV, SKEW
+
+  const sumAV = stats.reduce((a, s) => a + s.av, 0);
+  if (sumAV === 0) return 0;
+
+  const adValues = stats.map(s => s.ad);
+  const cvValues = stats.map(s => s.cv);
+  const skewValues = stats.map(s => s.skew);
+
+  const adMin = Math.min(...adValues);
+  const adMax = Math.max(...adValues);
+  const cvMin = Math.min(...cvValues);
+  const cvMax = Math.max(...cvValues);
+  const skewMin = Math.min(...skewValues);
+  const skewMax = Math.max(...skewValues);
+
+  const miList = stats.map(s => {
+    const dmlM = (m * s.av) / sumAV;
+    const norAD = normalize(s.ad, adMin, adMax);
+    const norCV = normalize(s.cv, cvMin, cvMax);
+    const norSkew = normalize(s.skew, skewMin, skewMax);
+    const dmlR2 = Math.pow(norAD, 2) + Math.pow(norCV, 2) + Math.pow(norSkew, 2);
+    return dmlM * dmlR2;
+  });
+
+  return miList.reduce((a, b) => a + b, 0) / n;
+}
+
+// 计算SKEW（偏度）
 function calculateSkew(values: number[], avg: number, sd: number): number {
   if (sd === 0 || values.length < 2) return 0;
   const n = values.length;
   const sum = values.reduce((acc, val) => acc + Math.pow((val - avg) / sd, 3), 0);
   return (n / ((n - 1) * (n - 2))) * sum;
-}
-
-// 计算单类型CDC
-function calculateSingleCDC(stats: { av: number; ad: number; cv: number; skew: number }[]): number {
-  if (!stats || stats.length === 0) return 0;
-  
-  const avgAv = stats.reduce((acc, s) => acc + s.av, 0) / stats.length;
-  const avgAd = stats.reduce((acc, s) => acc + s.ad, 0) / stats.length;
-  const avgCv = stats.reduce((acc, s) => acc + s.cv, 0) / stats.length;
-  
-  if (avgAv === 0) return 0;
-  return (avgAd / avgAv + avgCv / 100) / 2;
 }
 
 export async function POST(request: NextRequest) {
@@ -51,7 +78,7 @@ export async function POST(request: NextRequest) {
     };
 
     // 计算每个类型的统计数据
-    const updateData: Record<string, string | number> = {};
+    const updateData: Record<string, any> = {};
     const cdcInputData: Record<'hr' | 'tcr' | 'tsk', { av: number; ad: number; cv: number; skew: number }[]> = {
       hr: [], tcr: [], tsk: []
     };
@@ -66,9 +93,11 @@ export async function POST(request: NextRequest) {
       const ad = sd;
       const skew = calculateSkew(values, avg, sd);
 
-      updateData[`${type}_avg`] = avg.toFixed(2);
-      updateData[`${type}_sd`] = sd.toFixed(2);
-      updateData[`${type}_cv`] = cv.toFixed(2);
+      updateData[`${type}_avg`] = avg.toFixed(4);
+      updateData[`${type}_sd`] = sd.toFixed(4);
+      updateData[`${type}_cv`] = cv.toFixed(4);
+      updateData[`${type}_ad`] = ad.toFixed(4);
+      updateData[`${type}_skew`] = skew.toFixed(4);
       updateData[`${type}_count`] = values.length;
 
       cdcInputData[type as 'hr' | 'tcr' | 'tsk'].push({ av: avg, ad, cv, skew });
@@ -77,7 +106,9 @@ export async function POST(request: NextRequest) {
     // 计算CDC值
     const cdcResult: Record<string, number> = {};
     for (const type of ['hr', 'tcr', 'tsk'] as const) {
-      cdcResult[type] = calculateSingleCDC(cdcInputData[type]);
+      const cdc = calculateSingleCDC(cdcInputData[type]);
+      cdcResult[type] = cdc;
+      updateData[`${type}_cdc`] = cdc.toFixed(4);
     }
 
     // 保存到 user_environment_stats 表
@@ -91,46 +122,47 @@ export async function POST(request: NextRequest) {
       .eq('id', userId)
       .single();
 
-    for (const [type, value] of Object.entries(updateData)) {
-      if (type.includes('_avg')) {
-        const dataType = type.replace('_avg', '');
-        
-        const { data: existingRecord } = await supabase
+    // 保存每种数据类型
+    for (const type of ['hr', 'tcr', 'tsk'] as const) {
+      if (cdcInputData[type].length === 0) continue;
+      
+      const { data: existingRecord } = await supabase
+        .from('user_environment_stats')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('environment', envName)
+        .single();
+
+      const insertPayload: Record<string, any> = {
+        user_id: userId,
+        environment: envName,
+        environment_id: environmentId,
+        [`${type}_av`]: updateData[`${type}_avg`],
+        [`${type}_sd`]: updateData[`${type}_sd`],
+        [`${type}_cv`]: updateData[`${type}_cv`],
+        [`${type}_ad`]: updateData[`${type}_ad`],
+        [`${type}_skew`]: updateData[`${type}_skew`],
+        [`${type}_count`]: updateData[`${type}_count`],
+        [`${type}_cdc`]: updateData[`${type}_cdc`],
+        updated_at: new Date().toISOString()
+      };
+
+      // 如果有profile信息，也保存
+      if (profile) {
+        insertPayload.birth_date = profile.birth_date;
+        insertPayload.weight = profile.weight;
+        insertPayload.resting_hr = profile.resting_hr;
+      }
+
+      if (existingRecord) {
+        await supabase
           .from('user_environment_stats')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('environment', envName)
-          .single();
-
-        const updatePayload: Record<string, any> = {
-          [`${dataType}_av`]: value,
-          [`${dataType}_sd`]: updateData[`${dataType}_sd`],
-          [`${dataType}_cv`]: updateData[`${dataType}_cv`],
-          updated_at: new Date().toISOString()
-        };
-
-        // 如果有profile信息，也保存
-        if (profile) {
-          updatePayload.birth_date = profile.birth_date;
-          updatePayload.weight = profile.weight;
-          updatePayload.resting_hr = profile.resting_hr;
-        }
-
-        if (existingRecord) {
-          await supabase
-            .from('user_environment_stats')
-            .update(updatePayload)
-            .eq('id', existingRecord.id);
-        } else {
-          await supabase
-            .from('user_environment_stats')
-            .insert({
-              user_id: userId,
-              environment: envName,
-              environment_id: environmentId,
-              ...updatePayload
-            });
-        }
+          .update(insertPayload)
+          .eq('id', existingRecord.id);
+      } else {
+        await supabase
+          .from('user_environment_stats')
+          .insert(insertPayload);
       }
     }
 
