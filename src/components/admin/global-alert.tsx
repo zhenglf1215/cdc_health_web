@@ -188,8 +188,9 @@ export function GlobalAlertBanner() {
       if (soundEndRef.current > 0 && now >= soundEndRef.current) soundEndRef.current = 0;
       if (visualEndRef.current > 0 && now >= visualEndRef.current) {
         visualEndRef.current = 0;
+        // 报警结束，清空所有报警状态
         setShowBanner(false);
-        setAlertUsers(prev => prev.filter(u => currentAlerts.includes(`${u.id}-${u.type}`)));
+        setAlertUsers([]);
       }
 
     } catch (error) {
