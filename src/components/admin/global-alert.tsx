@@ -95,12 +95,12 @@ export function GlobalAlertBanner() {
           const response = await fetch(`/api/vital-data?userId=${user.id}&limit=5`);
           const data = await response.json();
           
-          if (data.success && data.records && data.records.length > 0) {
+          if (data.success && data.data && data.data.length > 0) {
             let latestHr = 0;
             let latestTcr = 0;
             
             // 获取最新的hr和tcr
-            for (const record of data.records) {
+            for (const record of data.data) {
               if (record.data_type === 'hr') {
                 latestHr = parseFloat(record.value);
               } else if (record.data_type === 'tcr') {
@@ -164,8 +164,92 @@ export function GlobalAlertBanner() {
     };
   }, [checkUsers, stopSound]);
 
-  if (!isAlerting) return null;
+  // 调试：强制触发报警
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugTcr, setDebugTcr] = useState(39);
+  const [debugHr, setDebugHr] = useState(190);
 
+  // 调试：手动触发报警
+  const triggerDebugAlert = () => {
+    setIsAlerting(true);
+    setAlertUsers([{
+      id: 'debug',
+      username: '调试用户',
+      type: 'tcr',
+      value: debugTcr
+    }]);
+    startSound();
+  };
+
+  if (!isAlerting && !debugMode) {
+    return (
+      <div className="fixed top-0 left-0 right-0 z-[100] bg-gray-800 text-white px-4 py-2 shadow-lg">
+        <div className="container mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-green-400" />
+            <span className="text-sm">报警系统正常 · 无异常数据</span>
+          </div>
+          <button
+            onClick={() => setDebugMode(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded"
+          >
+            调试模式
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 调试模式界面
+  if (debugMode) {
+    return (
+      <div className="fixed top-0 left-0 right-0 z-[100] bg-blue-800 text-white px-4 py-3 shadow-lg">
+        <div className="container mx-auto">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-medium">报警调试模式</span>
+            <button
+              onClick={() => setDebugMode(false)}
+              className="text-white/80 hover:text-white text-2xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm">Tcr:</label>
+              <input
+                type="number"
+                value={debugTcr}
+                onChange={(e) => setDebugTcr(parseFloat(e.target.value) || 0)}
+                className="w-20 bg-white/20 rounded px-2 py-1 text-sm"
+                step="0.1"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm">HR:</label>
+              <input
+                type="number"
+                value={debugHr}
+                onChange={(e) => setDebugHr(parseInt(e.target.value) || 0)}
+                className="w-20 bg-white/20 rounded px-2 py-1 text-sm"
+              />
+            </div>
+            <button
+              onClick={triggerDebugAlert}
+              className="bg-red-600 hover:bg-red-700 text-white text-sm px-4 py-1 rounded"
+            >
+              触发报警
+            </button>
+            <span className="text-xs text-white/70">
+              (Tcr≥38 或 HR≥180 触发)
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 正常报警横幅
   return (
     <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white px-4 py-3 shadow-lg">
       <div className="container mx-auto flex items-center justify-between">
