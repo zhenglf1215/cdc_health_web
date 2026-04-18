@@ -403,6 +403,11 @@ export default function ApplicantHomePage() {
       data.tsk.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       data.hr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
+      // 确保 hr 和 tsk 数量一致
+      if (data.hr.length !== data.tsk.length) {
+        throw new Error(`hr和tsk数据条数不一致：hr有${data.hr.length}条，tsk有${data.tsk.length}条`);
+      }
+
       setFilePreview(data);
     } catch (err: any) {
       setFileError(err.message);
@@ -422,8 +427,8 @@ export default function ApplicantHomePage() {
     const hrIdx = headers.findIndex(h => h.includes('hr') || h.includes('heart'));
     const timeIdx = headers.findIndex(h => h.includes('time') || h.includes('date'));
 
-    if (tcrIdx === -1 || tskIdx === -1 || hrIdx === -1) {
-      throw new Error('CSV缺少必要列：tcr、tsk、hr');
+    if (tskIdx === -1 || hrIdx === -1) {
+      throw new Error('CSV缺少必要列：tsk、hr');
     }
 
     const tcr: { timestamp: string; value: number }[] = [];
@@ -439,7 +444,8 @@ export default function ApplicantHomePage() {
         timestamp = new Date(Date.now() - (lines.length - i) * 60000).toISOString();
       }
       
-      if (cols[tcrIdx]) tcr.push({ timestamp, value: parseFloat(cols[tcrIdx]) });
+      // tcr 存在就解析，不存在也没关系（后端会递推计算）
+      if (tcrIdx >= 0 && cols[tcrIdx]) tcr.push({ timestamp, value: parseFloat(cols[tcrIdx]) });
       if (cols[tskIdx]) tsk.push({ timestamp, value: parseFloat(cols[tskIdx]) });
       if (cols[hrIdx]) hr.push({ timestamp, value: parseFloat(cols[hrIdx]) });
     }
