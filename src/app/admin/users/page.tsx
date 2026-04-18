@@ -263,7 +263,7 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <style jsx global>{`
+      <style>{`
         @keyframes breathe-border {
           0%, 100% { 
             box-shadow: 0 0 5px 0 rgba(239, 68, 68, 0.8);
