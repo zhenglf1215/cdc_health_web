@@ -180,6 +180,9 @@ export async function POST(request: NextRequest) {
           [`${dataType}_av`]: value,
           [`${dataType}_sd`]: updateData[`${dataType}_sd`],
           [`${dataType}_cv`]: updateData[`${dataType}_cv`],
+          [`${dataType}_ad`]: updateData[`${dataType}_ad`],
+          [`${dataType}_skew`]: updateData[`${dataType}_skew`],
+          [`${dataType}_count`]: updateData[`${dataType}_count`],
           updated_at: new Date().toISOString()
         };
         
