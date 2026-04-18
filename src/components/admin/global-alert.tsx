@@ -33,34 +33,49 @@ export function GlobalAlertBanner() {
   const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
   const wasAlertingRef = useRef(false);
 
-  // 播放提示音（持续）
+  // 播放提示音（持续蜂鸣）
   const playBeep = useCallback(() => {
+    console.log('playBeep 被调用');
     try {
       // 停止之前的
       if (oscRef.current) {
-        oscRef.current.stop();
+        try { oscRef.current.stop(); } catch {}
         oscRef.current = null;
       }
       if (audioCtxRef.current) {
-        audioCtxRef.current.close();
+        try { audioCtxRef.current.close(); } catch {}
+        audioCtxRef.current = null;
       }
       
-      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      // 创建 AudioContext
+      const AudioCtx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext);
+      if (!AudioCtx) {
+        console.log('浏览器不支持AudioContext');
+        return;
+      }
+      
+      const ctx = new AudioCtx();
       audioCtxRef.current = ctx;
+      console.log('AudioContext创建成功');
       
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 1000;
-      osc.type = 'sine';
-      gain.gain.value = 0.3;
-      osc.start();
+      // 创建振荡器
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
       
-      oscRef.current = osc;
-      gainRef.current = gain;
-    } catch (e) {
-      console.error('播放声音失败');
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      oscillator.frequency.value = 1000;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.3;
+      
+      oscillator.start();
+      oscRef.current = oscillator;
+      gainRef.current = gainNode;
+      
+      console.log('声音开始播放，频率1000Hz');
+    } catch (e: unknown) {
+      console.error('播放声音失败:', e);
     }
   }, []);
 
@@ -68,13 +83,14 @@ export function GlobalAlertBanner() {
   const stopBeep = useCallback(() => {
     try {
       if (oscRef.current) {
-        oscRef.current.stop();
+        try { oscRef.current.stop(); } catch {}
         oscRef.current = null;
       }
       if (audioCtxRef.current) {
-        audioCtxRef.current.close();
+        try { audioCtxRef.current.close(); } catch {}
         audioCtxRef.current = null;
       }
+      console.log('声音停止');
     } catch (e) {
       // 忽略
     }
