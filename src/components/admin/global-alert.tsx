@@ -32,10 +32,19 @@ export function GlobalAlertBanner() {
   // 记录当前异常的用户
   const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
   const wasAlertingRef = useRef(false);
-
+  const playBeepRef = useRef<() => void>(() => {});
+  const stopBeepRef = useRef<() => void>(() => {});
+  
   // 播放提示音（持续蜂鸣）
   const playBeep = useCallback(() => {
     console.log('playBeep 被调用');
+    
+    // 如果已经在播放，不要重复启动
+    if (oscRef.current && audioCtxRef.current) {
+      console.log('声音已在播放中，跳过');
+      return;
+    }
+    
     try {
       // 停止之前的
       if (oscRef.current) {
@@ -74,13 +83,16 @@ export function GlobalAlertBanner() {
       gainRef.current = gainNode;
       
       console.log('声音开始播放，频率1000Hz');
+      playBeepRef.current = playBeep;
+      stopBeepRef.current = stopBeep;
     } catch (e: unknown) {
       console.error('播放声音失败:', e);
     }
   }, []);
-
+  
   // 停止声音
   const stopBeep = useCallback(() => {
+    console.log('stopBeep 被调用');
     try {
       if (oscRef.current) {
         try { oscRef.current.stop(); } catch {}
@@ -96,6 +108,14 @@ export function GlobalAlertBanner() {
     }
   }, []);
 
+  // 初始化函数 ref
+  const initializedRef = useRef(false);
+  if (!initializedRef.current) {
+    playBeepRef.current = playBeep;
+    stopBeepRef.current = stopBeep;
+    initializedRef.current = true;
+  }
+  
   // 检查所有用户
   const checkUsers = useCallback(async () => {
     const now = Date.now();
@@ -197,7 +217,7 @@ export function GlobalAlertBanner() {
     } catch (error) {
       console.error('检查用户失败:', error);
     }
-  }, [isAlerting, playBeep, stopBeep]);
+  }, [checkUsers]);
 
   useEffect(() => {
     checkUsers();
@@ -252,11 +272,10 @@ export function GlobalAlertBanner() {
     return () => {
       clearInterval(interval);
       if (debugTimer) clearTimeout(debugTimer);
-      stopBeep();
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__triggerAlert = undefined;
       (window as unknown as { __triggerAlert?: undefined; __clearAlert?: undefined }).__clearAlert = undefined;
     };
-  }, [checkUsers, playBeep, stopBeep]);
+  }, []);
 
   if (!isAlerting && alertTrigger !== 'end') return null;
 
