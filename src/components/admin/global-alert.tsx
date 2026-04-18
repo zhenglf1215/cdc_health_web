@@ -137,8 +137,15 @@ export function GlobalAlertBanner() {
 
       // 更新报警状态
       const hasAlert = newAlerts.size > 0;
+      const alertUsers = Array.from(newAlerts.values());
       setIsAlerting(hasAlert);
-      setAlertUsers(Array.from(newAlerts.values()));
+      setAlertUsers(alertUsers);
+      
+      // 同步到 window 供其他组件使用
+      (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
+        users: alertUsers,
+        isAlerting
+      };
 
       // 同步声音
       if (hasAlert && !isAlerting) {
@@ -161,17 +168,23 @@ export function GlobalAlertBanner() {
     
     // 暴露调试方法到 window
     (window as unknown as { __triggerAlert?: (alert: AlertUser) => void }).__triggerAlert = (alert: AlertUser) => {
+      const newAlerts = [...alertUsers, alert];
       setIsAlerting(true);
-      setAlertUsers(prev => {
-        const filtered = prev.filter(a => !(a.id === alert.id && a.type === alert.type));
-        return [...filtered, alert];
-      });
+      setAlertUsers(newAlerts);
+      (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
+        users: newAlerts,
+        isAlerting: true
+      };
       startSound();
     };
     
     (window as unknown as { __clearAlert?: () => void }).__clearAlert = () => {
       setIsAlerting(false);
       setAlertUsers([]);
+      (window as unknown as { __globalAlert?: { users: AlertUser[]; isAlerting: boolean } }).__globalAlert = {
+        users: [],
+        isAlerting: false
+      };
       stopSound();
     };
     
