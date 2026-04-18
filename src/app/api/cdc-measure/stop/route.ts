@@ -103,13 +103,14 @@ export async function POST(request: NextRequest) {
     const groupedStats: Record<string, { values: number[]; environment_id: string; environment_name: string; data_type: string }> = {};
     
     sessionRecords.forEach((item) => {
-      const key = item.data_type;
+      // 将 tcr 映射为 tre（统一命名）
+      const key = item.data_type === 'tcr' ? 'tre' : item.data_type;
       if (!groupedStats[key]) {
         groupedStats[key] = {
           values: [],
           environment_id: item.environment_id,
           environment_name: item.environment_name,
-          data_type: item.data_type
+          data_type: key
         };
       }
       groupedStats[key].values.push(parseFloat(item.value));

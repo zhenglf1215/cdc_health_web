@@ -278,8 +278,6 @@ export function GlobalAlertBanner() {
           </div>
         </div>
       </div>
-      
-      <audio ref={audioRef} />
     </div>
   );
 }

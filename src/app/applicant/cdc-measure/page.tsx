@@ -205,7 +205,21 @@ export default function CDCMeasurePage() {
 
   // 从文件数据开始测量
   const startFromFile = async () => {
-    if (!filePreview || !selectedEnv || !user) return;
+    if (!filePreview) {
+      alert('请先上传数据文件');
+      return;
+    }
+    if (!selectedEnv) {
+      alert('请先选择测量环境');
+      return;
+    }
+    if (!user) {
+      alert('请先登录');
+      return;
+    }
+
+    setFileError(null);
+    setFileUploading(true);
 
     try {
       // 1. 开始CDC测量会话
@@ -220,7 +234,8 @@ export default function CDCMeasurePage() {
       });
 
       if (!startResponse.ok) {
-        throw new Error('创建测量会话失败');
+        const errData = await startResponse.json();
+        throw new Error(errData.message || '创建测量会话失败');
       }
 
       const startData = await startResponse.json();
@@ -253,7 +268,8 @@ export default function CDCMeasurePage() {
       });
 
       if (!dataResponse.ok) {
-        throw new Error('上传数据失败');
+        const errData = await dataResponse.json();
+        throw new Error(errData.message || '上传数据失败');
       }
 
       // 3. 结束CDC测量会话（这会自动计算统计数据并存入user_environment_stats）
@@ -279,7 +295,10 @@ export default function CDCMeasurePage() {
       }
     } catch (error) {
       console.error('导入数据失败:', error);
-      alert('导入数据失败，请重试');
+      setFileError(error instanceof Error ? error.message : '导入数据失败，请重试');
+      alert(error instanceof Error ? error.message : '导入数据失败，请重试');
+    } finally {
+      setFileUploading(false);
     }
   };
 
