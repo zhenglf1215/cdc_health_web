@@ -6,6 +6,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { userId, environmentId, environmentName } = body;
 
+    console.log('📤 CDC start 请求:', { userId, environmentId, environmentName });
+
     if (!userId || !environmentId) {
       return NextResponse.json(
         { success: false, message: '缺少必要参数' },
@@ -33,12 +35,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('创建CDC测量会话失败:', error);
+      console.error('❌ 创建CDC测量会话失败:', JSON.stringify(error));
       return NextResponse.json(
-        { success: false, message: '创建测量会话失败' },
+        { success: false, message: error.message || '创建测量会话失败' },
         { status: 500 }
       );
     }
+
+    console.log('✅ CDC会话创建成功:', sessionId);
 
     return NextResponse.json({
       success: true,
@@ -47,7 +51,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('API错误:', error);
+    console.error('❌ API错误:', error);
     return NextResponse.json(
       { success: false, message: '服务器错误' },
       { status: 500 }

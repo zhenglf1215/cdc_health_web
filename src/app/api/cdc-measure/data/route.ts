@@ -18,6 +18,14 @@ export async function POST(request: NextRequest) {
       data: VitalData[];
     };
 
+    console.log('📤 CDC data 请求:', { 
+      sessionId, 
+      userId, 
+      environmentId, 
+      environmentName,
+      dataCount: data?.length 
+    });
+
     if (!sessionId || !userId || !data || !Array.isArray(data)) {
       return NextResponse.json(
         { success: false, message: '缺少必要参数' },
@@ -37,17 +45,21 @@ export async function POST(request: NextRequest) {
       recorded_at: new Date(item.timestamp).toISOString()
     }));
 
+    console.log('📝 准备插入数据:', records.length, '条');
+
     const { error } = await supabase
       .from('vital_records')
       .insert(records);
 
     if (error) {
-      console.error('存储生命体征数据失败:', error);
+      console.error('❌ 存储生命体征数据失败:', JSON.stringify(error));
       return NextResponse.json(
-        { success: false, message: '存储数据失败' },
+        { success: false, message: error.message || '存储数据失败' },
         { status: 500 }
       );
     }
+
+    console.log('✅ 成功插入', records.length, '条数据');
 
     return NextResponse.json({
       success: true,
@@ -56,7 +68,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('API错误:', error);
+    console.error('❌ API错误:', error);
     return NextResponse.json(
       { success: false, message: '服务器错误' },
       { status: 500 }
