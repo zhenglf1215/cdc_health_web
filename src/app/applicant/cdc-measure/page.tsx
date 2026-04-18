@@ -199,9 +199,9 @@ export default function CDCMeasurePage() {
     const hr = Math.floor(70 + Math.random() * 20);
     const tsk = parseFloat((33 + Math.random() * 2).toFixed(1));
     
-    // 获取用户体重
+    // 获取用户体重（使用默认值）
     const age = 30;
-    const weight = user?.weight ? parseFloat(user.weight) : 65;
+    const weight = 65;
     
     // HR → Mi 递推计算
     const currentMi = calculateMi(hr, age, weight);
