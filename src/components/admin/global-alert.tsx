@@ -26,8 +26,12 @@ export function GlobalAlertBanner() {
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
   
+  const [alertType, setAlertType] = useState<string>('');
+  const [alertTrigger, setAlertTrigger] = useState<'start' | 'active' | 'end' | null>(null);
+
   // 记录当前异常的用户
   const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
+  const wasAlertingRef = useRef(false);
 
   // 播放警报音
   const startSound = useCallback(() => {
@@ -138,6 +142,26 @@ export function GlobalAlertBanner() {
       // 更新报警状态
       const hasAlert = newAlerts.size > 0;
       const alertUsers = Array.from(newAlerts.values());
+      
+      // 判断报警状态变化
+      if (hasAlert && !wasAlertingRef.current) {
+        // 报警开始
+        setAlertTrigger('start');
+        const hrAlert = alertUsers.find(u => u.type === 'hr');
+        const tcrAlert = alertUsers.find(u => u.type === 'tcr');
+        if (hrAlert) setAlertType(`HR=${hrAlert.value}≥180`);
+        else if (tcrAlert) setAlertType(`Tcr=${tcrAlert.value}≥38`);
+        startSound();
+      } else if (hasAlert && wasAlertingRef.current) {
+        // 报警持续
+        setAlertTrigger('active');
+      } else if (!hasAlert && wasAlertingRef.current) {
+        // 报警结束
+        setAlertTrigger('end');
+        stopSound();
+      }
+      
+      wasAlertingRef.current = hasAlert;
       setIsAlerting(hasAlert);
       setAlertUsers(alertUsers);
       
@@ -146,13 +170,6 @@ export function GlobalAlertBanner() {
         users: alertUsers,
         isAlerting
       };
-
-      // 同步声音
-      if (hasAlert && !isAlerting) {
-        startSound();
-      } else if (!hasAlert && isAlerting) {
-        stopSound();
-      }
 
       // 更新当前报警引用
       currentAlertsRef.current = newAlerts;
@@ -196,26 +213,52 @@ export function GlobalAlertBanner() {
     };
   }, [checkUsers, stopSound, startSound]);
 
-  if (!isAlerting) return null;
+  if (!isAlerting && alertTrigger !== 'end') return null;
+
+  // 报警结束状态显示3秒后消失
+  const showEndState = alertTrigger === 'end' && isAlerting === false;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white px-4 py-3 shadow-lg">
+    <div className={`fixed top-0 left-0 right-0 z-[100] px-4 py-3 shadow-lg ${
+      showEndState 
+        ? 'bg-green-600 text-white' 
+        : 'bg-red-600 text-white'
+    }`}>
       <div className="container mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <AlertTriangle className="w-6 h-6 animate-pulse" />
-          <div className="flex items-center gap-4">
-            {alertUsers.map((alert, index) => (
-              <span key={`${alert.id}-${alert.type}-${index}`}>
-                <strong>{alert.username}</strong>: 
-                {alert.type === 'hr' ? `心率 ${alert.value} bpm` : `核心体温 ${alert.value}°C`} 异常!
-              </span>
-            ))}
-          </div>
+          {showEndState ? (
+            <>
+              <span className="text-xl">✅</span>
+              <span className="text-lg font-medium">报警结束</span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="w-6 h-6 animate-pulse" />
+              <div className="flex items-center gap-4">
+                <span className={`text-sm px-3 py-1 rounded ${
+                  alertTrigger === 'start' 
+                    ? 'bg-yellow-400 text-red-800 font-medium' 
+                    : 'bg-white/20'
+                }`}>
+                  {alertTrigger === 'start' 
+                    ? `报警开始（${alertType}）` 
+                    : '报警中...'}
+                </span>
+                {alertUsers.map((alert, index) => (
+                  <span key={`${alert.id}-${alert.type}-${index}`}>
+                    <strong>{alert.username}</strong>: 
+                    {alert.type === 'hr' ? `HR ${alert.value} bpm` : `Tcr ${alert.value}°C`}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <button 
           onClick={() => {
             setIsAlerting(false);
             setAlertUsers([]);
+            setAlertTrigger(null);
             stopSound();
           }}
           className="text-white/80 hover:text-white text-2xl leading-none"
