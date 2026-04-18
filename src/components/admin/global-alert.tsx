@@ -32,7 +32,12 @@ export function GlobalAlertBanner() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscRef = useRef<OscillatorNode | null>(null);
   const isPlayingRef = useRef(false);
-  const initializedRef = useRef(false);
+  
+  // 报警状态 refs（用于调试回调）
+  const isAlertingRef = useRef(false);
+  const alertUsersRef = useRef<AlertUser[]>([]);
+  const setIsAlertingRef = useRef<((v: boolean) => void) | null>(null);
+  const setAlertUsersRef = useRef<((v: AlertUser[]) => void) | null>(null);
 
   // 播放声音
   const playBeep = useCallback(() => {
@@ -166,17 +171,23 @@ export function GlobalAlertBanner() {
 
   // 初始化
   useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
+    // 保存 setState 函数到 ref
+    setIsAlertingRef.current = setIsAlerting;
+    setAlertUsersRef.current = setAlertUsers;
     
     checkUsers();
     const interval = setInterval(checkUsers, POLL_INTERVAL);
     
     // 暴露调试方法
-    (window as unknown as { __triggerAlert?: (alert: AlertUser) => void }).__triggerAlert = (alert: AlertUser) => {
-      const newAlerts = [...alertUsers, alert];
-      setIsAlerting(true);
-      setAlertUsers(newAlerts);
+    const triggerAlert = (alert: AlertUser) => {
+      const currentUsers = alertUsersRef.current || [];
+      const newAlerts = [...currentUsers, alert];
+      
+      if (setIsAlertingRef.current) setIsAlertingRef.current(true);
+      if (setAlertUsersRef.current) setAlertUsersRef.current(newAlerts);
+      isAlertingRef.current = true;
+      alertUsersRef.current = newAlerts;
+      
       setAlertTrigger('start');
       if (alert.type === 'hr') setAlertType(`HR=${alert.value}≥180`);
       else setAlertType(`Tcr=${alert.value}≥38`);
@@ -185,20 +196,27 @@ export function GlobalAlertBanner() {
       // 10秒后自动结束
       setTimeout(() => {
         setAlertTrigger('end');
-        setIsAlerting(false);
-        setAlertUsers([]);
+        if (setIsAlertingRef.current) setIsAlertingRef.current(false);
+        if (setAlertUsersRef.current) setAlertUsersRef.current([]);
+        isAlertingRef.current = false;
+        alertUsersRef.current = [];
         stopBeep();
         setTimeout(() => setAlertTrigger(null), 3000);
       }, 10000);
     };
     
-    (window as unknown as { __clearAlert?: () => void }).__clearAlert = () => {
+    const clearAlert = () => {
       setAlertTrigger('end');
-      setIsAlerting(false);
-      setAlertUsers([]);
+      if (setIsAlertingRef.current) setIsAlertingRef.current(false);
+      if (setAlertUsersRef.current) setAlertUsersRef.current([]);
+      isAlertingRef.current = false;
+      alertUsersRef.current = [];
       stopBeep();
       setTimeout(() => setAlertTrigger(null), 3000);
     };
+    
+    (window as unknown as { __triggerAlert?: typeof triggerAlert }).__triggerAlert = triggerAlert;
+    (window as unknown as { __clearAlert?: typeof clearAlert }).__clearAlert = clearAlert;
     
     return () => {
       clearInterval(interval);
@@ -206,7 +224,7 @@ export function GlobalAlertBanner() {
       (window as unknown as { __triggerAlert?: undefined }).__triggerAlert = undefined;
       (window as unknown as { __clearAlert?: undefined }).__clearAlert = undefined;
     };
-  }, [checkUsers, playBeep, stopBeep, alertUsers]);
+  }, [checkUsers, playBeep, stopBeep]);
 
   // 显示结束状态
   const showEndState = alertTrigger === 'end' && !isAlerting;
