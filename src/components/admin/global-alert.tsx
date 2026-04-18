@@ -8,13 +8,12 @@ interface AlertUser {
   username: string;
   type: 'hr' | 'tcr';
   value: number;
-  time: string; // 报警时间（北京时间）
 }
 
 // 报警阈值
 const HR_THRESHOLD = 180;
 const TCR_THRESHOLD = 38;
-const POLL_INTERVAL = 3000; // 每3秒检查一次
+const POLL_INTERVAL = 3000;
 
 // 缓存用户列表
 let cachedUsers: { id: string; username: string; role: string }[] = [];
@@ -25,10 +24,9 @@ export function GlobalAlertBanner() {
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
   const audioRef = useRef<AudioContext | null>(null);
   
-  // 上次报警的时间（北京时间，格式：YYYY-MM-DD HH:mm）
-  const lastAlertTimeRef = useRef<string>('');
-  // 当前正在显示的报警信息
-  const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
+  // 记录每分钟的报警状态（防止同一分钟重复报警）
+  // 格式：分钟时间戳 -> Set<用户ID+类型>
+  const alertedMinutesRef = useRef<Map<number, Set<string>>>(new Map());
 
   // 播放警报音
   const playSound = useCallback(() => {
@@ -60,26 +58,23 @@ export function GlobalAlertBanner() {
     }
   }, []);
 
-  // 获取北京时间格式的时间字符串
-  const getBeijingTime = (date: Date): string => {
-    // 北京时间 = UTC时间 + 8小时
-    const beijingOffset = 8 * 60 * 60 * 1000;
-    const beijingTime = new Date(date.getTime() + beijingOffset);
-    const year = beijingTime.getUTCFullYear();
-    const month = String(beijingTime.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(beijingTime.getUTCDate()).padStart(2, '0');
-    const hour = String(beijingTime.getUTCHours()).padStart(2, '0');
-    const minute = String(beijingTime.getUTCMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day} ${hour}:${minute}`;
+  // 获取北京时间分钟时间戳
+  const getBeijingMinuteTimestamp = (): number => {
+    const now = new Date();
+    // 北京时间 = UTC + 8小时
+    const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    // 设置为分钟级别（忽略秒和毫秒）
+    beijingTime.setSeconds(0, 0);
+    return beijingTime.getTime();
   };
 
   // 检查所有用户
   const checkUsers = useCallback(async () => {
-    const now = Date.now();
-    const currentBeijingTime = getBeijingTime(new Date(now));
+    const currentMinute = getBeijingMinuteTimestamp();
     
     try {
       // 缓存用户列表（30秒）
+      const now = Date.now();
       if (!cachedUsers.length || now - cacheTime > 30000) {
         const res = await fetch('/api/users?user_id=admin&user_role=admin');
         const data = await res.json();
@@ -93,96 +88,49 @@ export function GlobalAlertBanner() {
 
       for (const user of cachedUsers) {
         try {
-          // 直接从vital_records获取最新数据（按时间降序）
+          // 从vital_records获取最新数据
           const response = await fetch(`/api/vital-data?userId=${user.id}&limit=5`);
           const data = await response.json();
           
           if (data.success && data.records && data.records.length > 0) {
             let latestHr = 0;
             let latestTcr = 0;
-            let latestTime = '';
             
-            // 遍历所有记录，找到最新的hr和tcr
+            // 获取最新的hr和tcr
             for (const record of data.records) {
-              const recordTime = record.recorded_at || record.timestamp || record.created_at;
-              const timeStr = recordTime ? getBeijingTime(new Date(recordTime)) : '';
-              
-              if (record.data_type === 'hr' && !latestHr) {
+              if (record.data_type === 'hr') {
                 latestHr = parseFloat(record.value);
-                latestTime = timeStr;
-              } else if (record.data_type === 'tcr' && !latestTcr) {
+              } else if (record.data_type === 'tcr') {
                 latestTcr = parseFloat(record.value);
-                if (!latestTime) latestTime = timeStr;
               }
-              
-              // 如果都找到了，退出循环
-              if (latestHr && latestTcr) break;
             }
             
-            // 如果没有有效数据，跳过
             if (latestHr === 0 && latestTcr === 0) continue;
-            
-            const hrKey = `${user.id}-hr`;
-            const tcrKey = `${user.id}-tcr`;
 
-            // 检查是否异常
-            const hrIsAlert = latestHr >= HR_THRESHOLD;
-            const tcrIsAlert = latestTcr >= TCR_THRESHOLD;
-
-            // HR报警判断：异常 + 当前分钟未报警过
-            if (hrIsAlert) {
-              const hrAlertKey = `${hrKey}-${currentBeijingTime}`;
-              if (!currentAlertsRef.current.has(hrAlertKey)) {
-                newAlerts.push({ 
-                  id: user.id, 
-                  username: user.username, 
-                  type: 'hr', 
-                  value: latestHr,
-                  time: latestTime || currentBeijingTime
-                });
-                currentAlertsRef.current.set(hrAlertKey, { 
-                  id: user.id, 
-                  username: user.username, 
-                  type: 'hr', 
-                  value: latestHr,
-                  time: latestTime || currentBeijingTime
-                });
-              }
-            } else {
-              // HR恢复正常，清除该用户HR的报警记录
-              currentAlertsRef.current.forEach((_, key) => {
-                if (key.startsWith(hrKey)) {
-                  currentAlertsRef.current.delete(key);
+            // HR报警
+            if (latestHr >= HR_THRESHOLD) {
+              const alertKey = `${user.id}-hr`;
+              const alerted = alertedMinutesRef.current.get(currentMinute);
+              if (!alerted?.has(alertKey)) {
+                newAlerts.push({ id: user.id, username: user.username, type: 'hr', value: latestHr });
+                if (!alertedMinutesRef.current.has(currentMinute)) {
+                  alertedMinutesRef.current.set(currentMinute, new Set());
                 }
-              });
+                alertedMinutesRef.current.get(currentMinute)!.add(alertKey);
+              }
             }
 
-            // Tcr报警判断：异常 + 当前分钟未报警过
-            if (tcrIsAlert) {
-              const tcrAlertKey = `${tcrKey}-${currentBeijingTime}`;
-              if (!currentAlertsRef.current.has(tcrAlertKey)) {
-                newAlerts.push({ 
-                  id: user.id, 
-                  username: user.username, 
-                  type: 'tcr', 
-                  value: latestTcr,
-                  time: latestTime || currentBeijingTime
-                });
-                currentAlertsRef.current.set(tcrAlertKey, { 
-                  id: user.id, 
-                  username: user.username, 
-                  type: 'tcr', 
-                  value: latestTcr,
-                  time: latestTime || currentBeijingTime
-                });
-              }
-            } else {
-              // Tcr恢复正常，清除该用户Tcr的报警记录
-              currentAlertsRef.current.forEach((_, key) => {
-                if (key.startsWith(tcrKey)) {
-                  currentAlertsRef.current.delete(key);
+            // Tcr报警
+            if (latestTcr >= TCR_THRESHOLD) {
+              const alertKey = `${user.id}-tcr`;
+              const alerted = alertedMinutesRef.current.get(currentMinute);
+              if (!alerted?.has(alertKey)) {
+                newAlerts.push({ id: user.id, username: user.username, type: 'tcr', value: latestTcr });
+                if (!alertedMinutesRef.current.has(currentMinute)) {
+                  alertedMinutesRef.current.set(currentMinute, new Set());
                 }
-              });
+                alertedMinutesRef.current.get(currentMinute)!.add(alertKey);
+              }
             }
           }
         } catch (e) {
@@ -192,20 +140,18 @@ export function GlobalAlertBanner() {
 
       // 触发新报警
       if (newAlerts.length > 0) {
-        setAlertUsers(prev => {
-          // 合并现有报警和新报警
-          const merged = new Map<string, AlertUser>();
-          prev.forEach(alert => merged.set(`${alert.id}-${alert.type}`, alert));
-          newAlerts.forEach(alert => merged.set(`${alert.id}-${alert.type}`, alert));
-          return Array.from(merged.values());
-        });
-        
+        setAlertUsers(newAlerts);
         setShowBanner(true);
         playSound();
-        
-        // 更新上次报警时间
-        lastAlertTimeRef.current = currentBeijingTime;
       }
+
+      // 清理旧的分钟记录（只保留最近5分钟）
+      const fiveMinutesAgo = currentMinute - 5 * 60 * 1000;
+      alertedMinutesRef.current.forEach((_, timestamp) => {
+        if (timestamp < fiveMinutesAgo) {
+          alertedMinutesRef.current.delete(timestamp);
+        }
+      });
 
     } catch (error) {
       console.error('检查用户失败:', error);
@@ -230,7 +176,6 @@ export function GlobalAlertBanner() {
               <span key={`${alert.id}-${alert.type}-${index}`}>
                 <strong>{alert.username}</strong>: 
                 {alert.type === 'hr' ? `心率 ${alert.value} bpm` : `核心体温 ${alert.value}°C`} 异常!
-                <span className="text-red-200 ml-1">[{alert.time}]</span>
               </span>
             ))}
           </div>
