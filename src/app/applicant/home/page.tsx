@@ -391,12 +391,15 @@ export default function ApplicantHomePage() {
         throw new Error('不支持的文件格式，请上传 CSV 或 JSON 文件');
       }
 
-      if (!data.tcr || !data.tsk || !data.hr) {
-        throw new Error('数据格式错误，需要包含 tcr、tsk、hr 三个字段');
+      // JSON 只需要 hr 和 tsk，Mi 和 Tcr 由后端递推计算
+      if (!data.hr || !data.tsk) {
+        throw new Error('数据格式错误，需要包含 hr 和 tsk 两个字段');
       }
 
-      // 按时间排序
-      data.tcr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      // 如果没有 tcr 字段，后端会递推计算
+      if (data.tcr) {
+        data.tcr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      }
       data.tsk.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       data.hr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
