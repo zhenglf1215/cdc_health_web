@@ -455,6 +455,7 @@ export default function ApplicantHomePage() {
     let successCount = 0;
     let failedCount = 0;
     const total = filePreview.hr.length;
+    let lastUploadedData: { tcr: number; tsk: number; hr: number } | null = null;
 
     try {
       for (let i = 0; i < filePreview.hr.length; i++) {
@@ -475,8 +476,17 @@ export default function ApplicantHomePage() {
             })
           });
 
-          if (res.ok) successCount++;
-          else failedCount++;
+          if (res.ok) {
+            successCount++;
+            // 保存最后一条数据用于更新显示
+            lastUploadedData = {
+              tcr: filePreview.tcr[i]?.value || 0,
+              tsk: filePreview.tsk[i]?.value || 0,
+              hr: filePreview.hr[i]?.value || 0
+            };
+          } else {
+            failedCount++;
+          }
         } catch {
           failedCount++;
         }
@@ -486,11 +496,25 @@ export default function ApplicantHomePage() {
 
       setUploadResult({ success: successCount, failed: failedCount, total });
       setUploadStatus('success');
-      setUploadMessage(failedCount === 0 ? '上传成功！' : `上传完成：成功${successCount}条，失败${failedCount}条`);
+      
+      // 如果上传成功，更新显示区域的数据
+      if (successCount > 0 && lastUploadedData) {
+        setVitalData(lastUploadedData);
+      }
+      
+      const message = failedCount === 0 
+        ? `上传成功！共 ${successCount} 条数据已添加到生命体征图表` 
+        : `上传完成：成功 ${successCount} 条，失败 ${failedCount} 条`;
+      setUploadMessage(message);
+      
+      // 添加浏览器alert反馈
+      alert(message);
       
     } catch (err: any) {
       setUploadStatus('error');
-      setUploadMessage('上传失败: ' + err.message);
+      const errorMsg = '上传失败: ' + err.message;
+      setUploadMessage(errorMsg);
+      alert(errorMsg);
     }
   };
 
