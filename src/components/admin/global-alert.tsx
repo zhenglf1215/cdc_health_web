@@ -20,61 +20,64 @@ let cachedUsers: { id: string; username: string; role: string }[] = [];
 let cacheTime = 0;
 
 export function GlobalAlertBanner() {
-  const [showBanner, setShowBanner] = useState(false);
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
+  const [isAlerting, setIsAlerting] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
   
-  // 记录每分钟的报警状态（防止同一分钟重复报警）
-  // 格式：分钟时间戳 -> Set<用户ID+类型>
-  const alertedMinutesRef = useRef<Map<number, Set<string>>>(new Map());
+  // 记录当前异常的用户
+  const currentAlertsRef = useRef<Map<string, AlertUser>>(new Map());
 
   // 播放警报音
-  const playSound = useCallback(() => {
+  const startSound = useCallback(() => {
     try {
       if (!audioRef.current) {
         audioRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       }
       const ctx = audioRef.current;
-      const now = ctx.currentTime;
       
-      for (let i = 0; i < 10; i++) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 880;
-        osc.type = 'sine';
-        gain.gain.setValueAtTime(0.3, now + i);
-        gain.gain.setValueAtTime(0, now + i + 0.2);
-        gain.gain.setValueAtTime(0.3, now + i + 0.4);
-        gain.gain.setValueAtTime(0, now + i + 0.6);
-        gain.gain.setValueAtTime(0.3, now + i + 0.8);
-        gain.gain.setValueAtTime(0, now + i + 1);
-        osc.start(now + i);
-        osc.stop(now + i + 1);
+      // 停止之前的
+      if (oscillatorRef.current) {
+        oscillatorRef.current.stop();
+        oscillatorRef.current = null;
       }
+      
+      // 创建持续警报音
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'square';
+      gain.gain.value = 0.2;
+      
+      osc.start();
+      oscillatorRef.current = osc;
+      gainRef.current = gain;
     } catch (e) {
       console.error('播放声音失败');
     }
   }, []);
 
-  // 获取北京时间分钟时间戳
-  const getBeijingMinuteTimestamp = (): number => {
-    const now = new Date();
-    // 北京时间 = UTC + 8小时
-    const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    // 设置为分钟级别（忽略秒和毫秒）
-    beijingTime.setSeconds(0, 0);
-    return beijingTime.getTime();
-  };
+  // 停止警报音
+  const stopSound = useCallback(() => {
+    try {
+      if (oscillatorRef.current) {
+        oscillatorRef.current.stop();
+        oscillatorRef.current = null;
+      }
+    } catch (e) {
+      // 忽略
+    }
+  }, []);
 
   // 检查所有用户
   const checkUsers = useCallback(async () => {
-    const currentMinute = getBeijingMinuteTimestamp();
+    const now = Date.now();
     
     try {
       // 缓存用户列表（30秒）
-      const now = Date.now();
       if (!cachedUsers.length || now - cacheTime > 30000) {
         const res = await fetch('/api/users?user_id=admin&user_role=admin');
         const data = await res.json();
@@ -84,7 +87,7 @@ export function GlobalAlertBanner() {
         }
       }
 
-      const newAlerts: AlertUser[] = [];
+      const newAlerts: Map<string, AlertUser> = new Map();
 
       for (const user of cachedUsers) {
         try {
@@ -107,30 +110,24 @@ export function GlobalAlertBanner() {
             
             if (latestHr === 0 && latestTcr === 0) continue;
 
-            // HR报警
+            // HR检查
             if (latestHr >= HR_THRESHOLD) {
-              const alertKey = `${user.id}-hr`;
-              const alerted = alertedMinutesRef.current.get(currentMinute);
-              if (!alerted?.has(alertKey)) {
-                newAlerts.push({ id: user.id, username: user.username, type: 'hr', value: latestHr });
-                if (!alertedMinutesRef.current.has(currentMinute)) {
-                  alertedMinutesRef.current.set(currentMinute, new Set());
-                }
-                alertedMinutesRef.current.get(currentMinute)!.add(alertKey);
-              }
+              newAlerts.set(`${user.id}-hr`, { 
+                id: user.id, 
+                username: user.username, 
+                type: 'hr', 
+                value: latestHr 
+              });
             }
 
-            // Tcr报警
+            // Tcr检查
             if (latestTcr >= TCR_THRESHOLD) {
-              const alertKey = `${user.id}-tcr`;
-              const alerted = alertedMinutesRef.current.get(currentMinute);
-              if (!alerted?.has(alertKey)) {
-                newAlerts.push({ id: user.id, username: user.username, type: 'tcr', value: latestTcr });
-                if (!alertedMinutesRef.current.has(currentMinute)) {
-                  alertedMinutesRef.current.set(currentMinute, new Set());
-                }
-                alertedMinutesRef.current.get(currentMinute)!.add(alertKey);
-              }
+              newAlerts.set(`${user.id}-tcr`, { 
+                id: user.id, 
+                username: user.username, 
+                type: 'tcr', 
+                value: latestTcr 
+              });
             }
           }
         } catch (e) {
@@ -138,33 +135,36 @@ export function GlobalAlertBanner() {
         }
       }
 
-      // 触发新报警
-      if (newAlerts.length > 0) {
-        setAlertUsers(newAlerts);
-        setShowBanner(true);
-        playSound();
+      // 更新报警状态
+      const hasAlert = newAlerts.size > 0;
+      setIsAlerting(hasAlert);
+      setAlertUsers(Array.from(newAlerts.values()));
+
+      // 同步声音
+      if (hasAlert && !isAlerting) {
+        startSound();
+      } else if (!hasAlert && isAlerting) {
+        stopSound();
       }
 
-      // 清理旧的分钟记录（只保留最近5分钟）
-      const fiveMinutesAgo = currentMinute - 5 * 60 * 1000;
-      alertedMinutesRef.current.forEach((_, timestamp) => {
-        if (timestamp < fiveMinutesAgo) {
-          alertedMinutesRef.current.delete(timestamp);
-        }
-      });
+      // 更新当前报警引用
+      currentAlertsRef.current = newAlerts;
 
     } catch (error) {
       console.error('检查用户失败:', error);
     }
-  }, [playSound]);
+  }, [isAlerting, startSound, stopSound]);
 
   useEffect(() => {
     checkUsers();
     const interval = setInterval(checkUsers, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [checkUsers]);
+    return () => {
+      clearInterval(interval);
+      stopSound();
+    };
+  }, [checkUsers, stopSound]);
 
-  if (!showBanner) return null;
+  if (!isAlerting) return null;
 
   return (
     <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white px-4 py-3 shadow-lg">
@@ -181,7 +181,11 @@ export function GlobalAlertBanner() {
           </div>
         </div>
         <button 
-          onClick={() => setShowBanner(false)}
+          onClick={() => {
+            setIsAlerting(false);
+            setAlertUsers([]);
+            stopSound();
+          }}
           className="text-white/80 hover:text-white text-2xl leading-none"
         >
           ×
@@ -189,4 +193,13 @@ export function GlobalAlertBanner() {
       </div>
     </div>
   );
+}
+
+// 导出呼吸报警状态供其他组件使用
+export function useAlertState() {
+  const [isAlerting, setIsAlerting] = useState(false);
+  const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
+  
+  // 这个可以在其他组件中使用
+  return { isAlerting, alertUsers };
 }
