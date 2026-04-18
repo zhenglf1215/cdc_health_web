@@ -478,7 +478,6 @@ export default function ApplicantHomePage() {
               userId: user.id,
               company: user.company,
               environmentName: selectedEnv?.name || '默认环境',
-              tcr: filePreview.tcr[i]?.value,
               tsk: filePreview.tsk[i]?.value,
               hr: filePreview.hr[i]?.value,
               timestamp
@@ -489,7 +488,7 @@ export default function ApplicantHomePage() {
             successCount++;
             // 保存最后一条数据用于更新显示
             lastUploadedData = {
-              tcr: filePreview.tcr[i]?.value || 0,
+              tcr: 0,  // 后端自动计算
               tsk: filePreview.tsk[i]?.value || 0,
               hr: filePreview.hr[i]?.value || 0
             };
