@@ -7,8 +7,8 @@ function normalize(value: number, min: number, max: number): number {
   return (value - min) / (max - min);
 }
 
-// 计算单维度CDC
-function calculateSingleCDC(stats: { av: number; ad: number; cv: number; skew: number }[]): number {
+// 计算CDC
+function calculateCDC(stats: { av: number; ad: number; cv: number; skew: number }[]): number {
   if (stats.length < 2) return 0;
 
   const m = stats.length;
@@ -48,12 +48,19 @@ function calculateSkew(values: number[], avg: number, sd: number): number {
   return (n / ((n - 1) * (n - 2))) * sum;
 }
 
+// 数据类型映射：前端传入的字段名 -> 数据库字段名
+const TYPE_MAP: Record<string, string> = {
+  'hr': 'hr',    // 心率
+  'tcr': 'tre',  // 核心体温 (Tre = 核心体温估算)
+  'tsk': 'tsk'   // 皮肤温度
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { userId, environmentId, environmentName, tcr, tsk, hr } = body;
 
-    console.log('📤 CDC直接计算请求:', { userId, environmentId, environmentName, tcr, tsk, hr });
+    console.log('📤 CDC计算请求:', { userId, environmentId, environmentName });
 
     if (!userId || !environmentId) {
       return NextResponse.json(
@@ -70,18 +77,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 构建数据映射
+    const supabase = getSupabaseClient();
+    const envName = environmentName || `env_${environmentId}`;
+
+    // 构建当前上传数据的统计
     const dataMap: Record<string, number[]> = {
       tcr: Array.isArray(tcr) ? tcr.filter((v: number) => !isNaN(v)) : [],
       tsk: Array.isArray(tsk) ? tsk.filter((v: number) => !isNaN(v)) : [],
       hr: Array.isArray(hr) ? hr.filter((v: number) => !isNaN(v)) : []
     };
 
-    // 计算每个类型的统计数据
-    const updateData: Record<string, any> = {};
-    const cdcInputData: Record<'hr' | 'tcr' | 'tsk', { av: number; ad: number; cv: number; skew: number }[]> = {
-      hr: [], tcr: [], tsk: []
-    };
+    const currentStats: Record<string, { av: number; ad: number; cv: number; skew: number }> = {};
 
     for (const [type, values] of Object.entries(dataMap)) {
       if (values.length === 0) continue;
@@ -93,39 +99,10 @@ export async function POST(request: NextRequest) {
       const ad = sd;
       const skew = calculateSkew(values, avg, sd);
 
-      updateData[`${type}_avg`] = avg.toFixed(4);
-      updateData[`${type}_sd`] = sd.toFixed(4);
-      updateData[`${type}_cv`] = cv.toFixed(4);
-      updateData[`${type}_ad`] = ad.toFixed(4);
-      updateData[`${type}_skew`] = skew.toFixed(4);
-      updateData[`${type}_count`] = values.length;
+      currentStats[type] = { av: avg, ad, cv, skew };
+      const dbType = TYPE_MAP[type];
 
-      cdcInputData[type as 'hr' | 'tcr' | 'tsk'].push({ av: avg, ad, cv, skew });
-    }
-
-    // 计算CDC值
-    const cdcResult: Record<string, number> = {};
-    for (const type of ['hr', 'tcr', 'tsk'] as const) {
-      const cdc = calculateSingleCDC(cdcInputData[type]);
-      cdcResult[type] = cdc;
-      updateData[`${type}_cdc`] = cdc.toFixed(4);
-    }
-
-    // 保存到 user_environment_stats 表
-    const supabase = getSupabaseClient();
-    const envName = environmentName || `env_${environmentId}`;
-
-    // 获取用户信息
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('birth_date, weight, resting_hr')
-      .eq('id', userId)
-      .single();
-
-    // 保存每种数据类型
-    for (const type of ['hr', 'tcr', 'tsk'] as const) {
-      if (cdcInputData[type].length === 0) continue;
-      
+      // 保存当前数据的统计值到数据库
       const { data: existingRecord } = await supabase
         .from('user_environment_stats')
         .select('id')
@@ -137,22 +114,14 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         environment: envName,
         environment_id: environmentId,
-        [`${type}_av`]: updateData[`${type}_avg`],
-        [`${type}_sd`]: updateData[`${type}_sd`],
-        [`${type}_cv`]: updateData[`${type}_cv`],
-        [`${type}_ad`]: updateData[`${type}_ad`],
-        [`${type}_skew`]: updateData[`${type}_skew`],
-        [`${type}_count`]: updateData[`${type}_count`],
-        [`${type}_cdc`]: updateData[`${type}_cdc`],
+        [`${dbType}_av`]: avg.toFixed(4),
+        [`${dbType}_sd`]: sd.toFixed(4),
+        [`${dbType}_cv`]: cv.toFixed(4),
+        [`${dbType}_ad`]: ad.toFixed(4),
+        [`${dbType}_skew`]: skew.toFixed(4),
+        [`${dbType}_count`]: values.length,
         updated_at: new Date().toISOString()
       };
-
-      // 如果有profile信息，也保存
-      if (profile) {
-        insertPayload.birth_date = profile.birth_date;
-        insertPayload.weight = profile.weight;
-        insertPayload.resting_hr = profile.resting_hr;
-      }
 
       if (existingRecord) {
         await supabase
@@ -166,13 +135,86 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('✅ CDC计算完成:', cdcResult);
+    // 查询该用户所有环境的已有统计数据
+    const { data: allStats } = await supabase
+      .from('user_environment_stats')
+      .select('*')
+      .eq('user_id', userId);
+
+    // 构建 CDC 计算所需的数据（当前数据 + 历史数据）
+    const cdcInputData: Record<string, { av: number; ad: number; cv: number; skew: number }[]> = {
+      hr: [], tcr: [], tsk: []
+    };
+
+    // 添加当前上传数据的统计
+    for (const [type, stat] of Object.entries(currentStats)) {
+      cdcInputData[type].push(stat);
+    }
+
+    // 添加历史数据的统计
+    if (allStats && allStats.length > 0) {
+      for (const record of allStats) {
+        // 跳过当前环境的数据（已经在currentStats中）
+        if (record.environment === envName) continue;
+
+        // HR数据
+        if (record.hr_av && !isNaN(parseFloat(record.hr_av))) {
+          cdcInputData.hr.push({
+            av: parseFloat(record.hr_av),
+            ad: record.hr_ad ? parseFloat(record.hr_ad) : 0,
+            cv: record.hr_cv ? parseFloat(record.hr_cv) : 0,
+            skew: record.hr_skew ? parseFloat(record.hr_skew) : 0
+          });
+        }
+
+        // Tre数据 (核心体温)
+        if (record.tcr_av && !isNaN(parseFloat(record.tcr_av))) {
+          cdcInputData.tcr.push({
+            av: parseFloat(record.tcr_av),
+            ad: record.tcr_ad ? parseFloat(record.tcr_ad) : 0,
+            cv: record.tcr_cv ? parseFloat(record.tcr_cv) : 0,
+            skew: record.tcr_skew ? parseFloat(record.tcr_skew) : 0
+          });
+        }
+
+        // Tsk数据 (皮肤温度)
+        if (record.tsk_av && !isNaN(parseFloat(record.tsk_av))) {
+          cdcInputData.tsk.push({
+            av: parseFloat(record.tsk_av),
+            ad: record.tsk_ad ? parseFloat(record.tsk_ad) : 0,
+            cv: record.tsk_cv ? parseFloat(record.tsk_cv) : 0,
+            skew: record.tsk_skew ? parseFloat(record.tsk_skew) : 0
+          });
+        }
+      }
+    }
+
+    // 计算CDC值
+    const cdcResult: Record<string, number> = {};
+    for (const type of ['hr', 'tcr', 'tsk']) {
+      const cdc = calculateCDC(cdcInputData[type]);
+      cdcResult[type] = cdc;
+    }
+
+    console.log('✅ CDC计算完成:', { 
+      cdcResult, 
+      dataPoints: {
+        hr: cdcInputData.hr.length,
+        tcr: cdcInputData.tcr.length,
+        tsk: cdcInputData.tsk.length
+      }
+    });
 
     return NextResponse.json({
       success: true,
       message: 'CDC计算完成',
       cdc: cdcResult,
-      stats: updateData
+      dataCount: {
+        hr: cdcInputData.hr.length,
+        tcr: cdcInputData.tcr.length,
+        tsk: cdcInputData.tsk.length
+      },
+      stats: currentStats
     });
 
   } catch (error) {

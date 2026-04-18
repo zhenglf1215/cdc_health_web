@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
         cdcResult.hr = calculateCDC(hrData);
       }
 
-      // TCR CDC
+      // TCR CDC (tre = 核心体温估算)
       const tcrData: StatsRow[] = stats
         .filter(s => s.tcr_av !== null)
         .map(s => ({
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
             result.cdc_hr = calculateCDC(hrData);
           }
 
-          // TCR CDC
+          // TCR CDC (tre = 核心体温估算)
           const tcrData: StatsRow[] = stats
             .filter(s => s.tcr_av !== null)
             .map(s => ({
