@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Play,
   Square,
@@ -24,22 +24,9 @@ import {
   Wind,
   FileText,
   X,
-  ChevronRight
+  Activity
 } from 'lucide-react';
 import { getCurrentUser, type UserInfo } from '@/lib/auth';
-
-interface WeatherData {
-  success: boolean;
-  location: string;
-  lives?: {
-    weather: string;
-    temperature: string;
-    humidity: string;
-    pressure: string;
-    winddirection: string;
-    windpower: string;
-  };
-}
 
 interface PublishedEnvironment {
   id: string;
@@ -61,7 +48,7 @@ export default function ApplicantHomePage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ===== CDC测量状态 =====
+  // ===== 生命体征测量状态 =====
   const [environments, setEnvironments] = useState<PublishedEnvironment[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<PublishedEnvironment | null>(null);
   const [envsLoading, setEnvsLoading] = useState(false);
@@ -90,12 +77,12 @@ export default function ApplicantHomePage() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [locationError, setLocationError] = useState('');
-  const [gpsPosition, setGpsPosition] = useState<{ lng: number; lat: number } | null>(null); // 保存GPS位置
+  const [gpsPosition, setGpsPosition] = useState<{ lng: number; lat: number } | null>(null);
   const mapRef = useRef<any>(null);
   const gpsMarkerRef = useRef<any>(null);
 
   // ===== 天气状态 =====
-  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weather, setWeather] = useState<any>(null);
   const [clickAddress, setClickAddress] = useState('');
 
   // ===== 地区搜索状态 =====
@@ -109,7 +96,6 @@ export default function ApplicantHomePage() {
   const [adviceLoading, setAdviceLoading] = useState(false);
 
   useEffect(() => {
-    // 在 AMap SDK 加载前设置安全密钥
     (window as any)._AMapSecurityConfig = {
       securityJsCode: '2b2821be9825aa9ee71a6f9c8d82ccb1',
     };
@@ -140,18 +126,13 @@ export default function ApplicantHomePage() {
   const handleSelectEnvironment = (env: PublishedEnvironment) => {
     setSelectedEnv(env);
     
-    // 只有地图发布的环境（有经纬度）才跳转地图
-    // 注意：不覆盖gpsPosition，保持用户GPS位置不变
     if (env.latitude && env.longitude && mapRef.current) {
       mapRef.current.setCenter([env.longitude, env.latitude]);
-      // GPS按钮仍然可以回到用户位置，不受环境选择影响
     }
-    // 普通环境（无经纬度）不跳转地图
   };
 
-  // ===== CDC测量功能 =====
+  // ===== 生命体征测量功能 =====
   const handleStartMeasure = () => {
-    // 检查蓝牙连接状态
     if (uploadMode === 'bluetooth' && !bluetoothConnected) {
       alert('请先连接蓝牙设备');
       return;
@@ -163,16 +144,13 @@ export default function ApplicantHomePage() {
     }
     
     if (uploadMode === 'bluetooth') {
-      // 蓝牙模式 - 开始测量
       setIsMeasuring(true);
       setElapsedTime(0);
       
-      // 计时器
       timerRef.current = setInterval(() => {
         setElapsedTime(t => t + 1);
       }, 1000);
 
-      // 每分钟记录一次数据
       dataIntervalRef.current = setInterval(async () => {
         const data = {
           tcr: parseFloat((36.5 + Math.random() * 0.5).toFixed(1)),
@@ -181,7 +159,6 @@ export default function ApplicantHomePage() {
         };
         setVitalData(data);
         
-        // 上传到服务器（同时上传 Tre、TSK、HR）
         if (user) {
           const timestamp = new Date().toISOString();
           try {
@@ -203,14 +180,12 @@ export default function ApplicantHomePage() {
             console.error('上传失败:', err);
           }
         }
-      }, 60000); // 每60秒记录一次
+      }, 60000);
     } else {
-      // 文件模式 - 检查是否有上传数据
       if (!filePreview) {
         alert('请先上传数据文件');
         return;
       }
-      // 开始上传数据
       handleUploadData();
     }
   };
@@ -237,12 +212,10 @@ export default function ApplicantHomePage() {
   // ===== 蓝牙连接 =====
   const handleConnectBluetooth = () => {
     if (bluetoothConnected) {
-      // 已连接，断开
       setBluetoothConnected(false);
       return;
     }
     
-    // 模拟蓝牙连接（后续替换为真实蓝牙逻辑）
     setConnecting(true);
     setTimeout(() => {
       setBluetoothConnected(true);
@@ -272,12 +245,10 @@ export default function ApplicantHomePage() {
         throw new Error('不支持的文件格式，请上传 CSV 或 JSON 文件');
       }
 
-      // 验证数据格式
       if (!data.tcr || !data.tsk || !data.hr) {
         throw new Error('数据格式错误，需要包含 tre、tsk、hr 三个字段');
       }
 
-      // 按时间排序
       data.tcr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       data.tsk.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       data.hr.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -332,11 +303,9 @@ export default function ApplicantHomePage() {
       let uploadCount = 0;
       const total = filePreview.hr.length;
 
-      // 每条数据间隔1分钟上传
       for (let i = 0; i < filePreview.hr.length; i++) {
         const timestamp = filePreview.hr[i].timestamp;
         
-        // 同时上传 Tre、TSK、HR
         await fetch('/api/vital-upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -373,7 +342,6 @@ export default function ApplicantHomePage() {
         plugins: ['AMap.Geocoder', 'AMap.PlaceSearch'],
       });
 
-      // 保存AMap实例供Geocoder使用（不用于搜索）
       const map = new AMap.Map(container, {
         zoom: 12,
         center: [106.531, 29.544],
@@ -381,19 +349,16 @@ export default function ApplicantHomePage() {
 
       mapRef.current = map;
 
-      // 地图移动结束后获取中心点位置的天气
       const updateWeatherByCenter = async () => {
         const center = map.getCenter();
         const lng = center.getLng();
         const lat = center.getLat();
 
-        // 逆地理编码
         const geocoder = new AMap.Geocoder();
         geocoder.getAddress([lng, lat], (status: string, result: any) => {
           setClickAddress(status === 'complete' ? result.regeocode?.formattedAddress : `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
         });
 
-        // 获取天气
         try {
           const res = await fetch(`/api/weather?lat=${lat}&lng=${lng}`);
           const weatherData = await res.json();
@@ -402,10 +367,8 @@ export default function ApplicantHomePage() {
         } catch {}
       };
 
-      // 监听地图移动结束事件
       map.on('moveend', updateWeatherByCenter);
 
-      // 默认天气
       try {
         const res = await fetch('/api/weather?lat=29.544&lng=106.531');
         const weatherData = await res.json();
@@ -429,15 +392,12 @@ export default function ApplicantHomePage() {
 
   // ===== 地区搜索 =====
   const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      return;
-    }
+    if (!searchQuery.trim()) return;
     
     setSearching(true);
     setSearchResults([]);
     
     try {
-      // 使用高德 PlaceSearch
       const AMapLoader = (await import('@amap/amap-jsapi-loader')).default;
       const AMap = await AMapLoader.load({
         key: 'ddf55d516ff9ec74e260c0d466135ab4',
@@ -452,7 +412,6 @@ export default function ApplicantHomePage() {
       });
       
       placeSearch.search(searchQuery, (status: string, result: any) => {
-        console.log('搜索状态:', status, result);
         if (status === 'complete' && result.poiList && result.poiList.pois) {
           const results = result.poiList.pois.slice(0, 5).map((item: any, index: number) => ({
             id: index,
@@ -465,11 +424,7 @@ export default function ApplicantHomePage() {
 
           setSearchResults(results);
           setShowResults(true);
-        } else if (status === 'no_data') {
-          console.log('搜索无结果');
-          setSearchResults([]);
         } else {
-          console.log('搜索失败:', result);
           setSearchResults([]);
         }
         setSearching(false);
@@ -484,23 +439,17 @@ export default function ApplicantHomePage() {
     const lng = result.lng;
     const lat = result.lat;
     
-    if (!lng || !lat) {
-      console.error('结果没有位置信息');
-      return;
-    }
+    if (!lng || !lat) return;
     
-    // 地图跳转 - 高德地图使用 [lng, lat] 格式
     if (mapRef.current) {
       mapRef.current.setCenter([lng, lat]);
       mapRef.current.setZoom(14);
     }
     
-    // 更新地址和天气
     setClickAddress(result.name || result.address);
     setShowResults(false);
     setSearchQuery('');
     
-    // 更新天气
     fetch(`/api/weather?lat=${lat}&lng=${lng}`)
       .then(res => res.json())
       .then(weatherData => {
@@ -511,7 +460,6 @@ export default function ApplicantHomePage() {
   };
 
   const handleGetLocation = () => {
-    // 如果已有GPS位置，点击按钮回到GPS位置
     if (gpsPosition && mapRef.current) {
       mapRef.current.setCenter([gpsPosition.lng, gpsPosition.lat]);
       mapRef.current.setZoom(15);
@@ -531,14 +479,12 @@ export default function ApplicantHomePage() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
 
-        // 保存GPS位置
         setGpsPosition({ lng, lat });
 
         if (mapRef.current) {
           mapRef.current.setCenter([lng, lat]);
           mapRef.current.setZoom(15);
 
-          // 添加GPS位置标记
           const AMapLib = (window as any).AMap;
           if (gpsMarkerRef.current) {
             gpsMarkerRef.current.setPosition([lng, lat]);
@@ -547,7 +493,7 @@ export default function ApplicantHomePage() {
               position: [lng, lat],
               icon: new AMapLib.Icon({
                 size: new AMapLib.Size(32, 32),
-                image: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png', // 蓝色标记
+                image: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',
                 imageSize: new AMapLib.Size(32, 32),
               }),
               offset: new AMapLib.Pixel(-16, -32),
@@ -572,7 +518,7 @@ export default function ApplicantHomePage() {
   };
 
   // ===== 获取服装推荐 =====
-  const fetchClothingAdvice = async (weatherData: WeatherData) => {
+  const fetchClothingAdvice = async (weatherData: any) => {
     if (!weatherData?.lives) return;
     
     setAdviceLoading(true);
@@ -595,7 +541,6 @@ export default function ApplicantHomePage() {
       
       if (!res.ok) throw new Error('请求失败');
       
-      // 流式读取
       const reader = res.body?.getReader();
       if (!reader) throw new Error('无法读取响应');
       
@@ -614,6 +559,14 @@ export default function ApplicantHomePage() {
     setAdviceLoading(false);
   };
 
+  // 跳转到环境地图
+  const handleJumpToEnvironmentMap = (env: PublishedEnvironment) => {
+    if (env.latitude && env.longitude && mapRef.current) {
+      mapRef.current.setCenter([env.longitude, env.latitude]);
+      mapRef.current.setZoom(15);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -629,316 +582,394 @@ export default function ApplicantHomePage() {
         <p className="text-gray-500 mt-1">CDC健康检测系统</p>
       </div>
 
-      {/* ===== CDC测量区域 ===== */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Heart className="w-5 h-5 text-blue-600" />
-            CDC测量
-            {/* 蓝牙状态指示 */}
-            <Badge variant={bluetoothConnected ? 'default' : 'outline'} className={`ml-2 ${bluetoothConnected ? 'bg-green-600' : ''}`}>
-              <Bluetooth className="w-3 h-3 mr-1" />
-              {connecting ? '连接中...' : bluetoothConnected ? '已连接' : '未连接'}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* 环境选择 */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">选择测量环境</label>
-            {envsLoading ? (
-              <div className="flex items-center gap-2 text-gray-500">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>加载中...</span>
-              </div>
-            ) : environments.length === 0 ? (
-              <p className="text-gray-400 text-sm">暂无可用环境</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {environments.map(env => (
-                  <button
-                    key={env.id}
-                    onClick={() => handleSelectEnvironment(env)}
-                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                      selectedEnv?.id === env.id
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <MapPin className="w-4 h-4 mr-1 inline" />
-                    {env.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* ===== 位置检索 & 生命体征测量 选项卡 ===== */}
+      <Tabs defaultValue="location" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="location" className="flex items-center gap-2">
+            <MapPin className="w-4 h-4" />
+            位置检索
+          </TabsTrigger>
+          <TabsTrigger value="vital" className="flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            生命体征测量
+          </TabsTrigger>
+        </TabsList>
 
-          {/* 上传方式 */}
-          <div className="flex gap-2">
-            <Button
-              variant={uploadMode === 'bluetooth' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setUploadMode('bluetooth')}
-            >
-              <Bluetooth className="w-4 h-4 mr-2" />
-              蓝牙上传
-            </Button>
-            <Button
-              variant={uploadMode === 'file' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setUploadMode('file')}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              文件上传
-            </Button>
-            {/* 蓝牙连接按钮 */}
-            {uploadMode === 'bluetooth' && (
-              <Button
-                variant={bluetoothConnected ? 'secondary' : 'outline'}
-                size="sm"
-                onClick={handleConnectBluetooth}
-                disabled={connecting}
-              >
-                {connecting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : bluetoothConnected ? (
-                  <XCircle className="w-4 h-4 mr-2" />
-                ) : (
-                  <Bluetooth className="w-4 h-4 mr-2" />
-                )}
-                {bluetoothConnected ? '断开连接' : '连接设备'}
-              </Button>
-            )}
-          </div>
-
-          {/* 文件上传界面 */}
-          {uploadMode === 'file' && (
-            <div className="p-4 bg-gray-50 rounded-lg space-y-4">
-              {uploadedFile ? (
-                <div className="space-y-3">
-                  <div className="flex items-center p-3 bg-white rounded-lg border">
-                    <FileText className="w-8 h-8 text-purple-600 mr-3" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{uploadedFile.name}</p>
-                      <p className="text-xs text-gray-500">{(uploadedFile.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                    <button onClick={() => { setUploadedFile(null); setFilePreview(null); }} className="p-1 hover:bg-gray-100 rounded">
-                      <X className="w-5 h-5 text-gray-400" />
-                    </button>
-                  </div>
-
-                  {filePreview && (
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <p className="text-sm font-medium text-green-700 mb-2">数据预览（1分钟间隔）：</p>
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                        <div className="text-center p-2 bg-white rounded">
-                          <p className="text-gray-500">核心温度 Tcr</p>
-                          <p className="font-bold text-orange-600">{filePreview.tcr.length} 条</p>
-                        </div>
-                        <div className="text-center p-2 bg-white rounded">
-                          <p className="text-gray-500">皮肤温度 Tsk</p>
-                          <p className="font-bold text-green-600">{filePreview.tsk.length} 条</p>
-                        </div>
-                        <div className="text-center p-2 bg-white rounded">
-                          <p className="text-gray-500">心率 HR</p>
-                          <p className="font-bold text-red-600">{filePreview.hr.length} 条</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {fileError && (
-                    <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                      {fileError}
-                    </div>
-                  )}
-
-                  {uploadStatus === 'success' && (
-                    <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center">
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      {uploadMessage}
-                    </div>
-                  )}
+        {/* ===== 位置检索选项卡 ===== */}
+        <TabsContent value="location" className="space-y-4">
+          {/* 已发布环境列表 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-blue-600" />
+                已发布的位置
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {envsLoading ? (
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>加载中...</span>
                 </div>
+              ) : environments.length === 0 ? (
+                <p className="text-gray-400 text-center py-4">暂无可用位置</p>
               ) : (
-                <label className="block cursor-pointer">
-                  <input
-                    type="file"
-                    accept=".csv,.json"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <div className="p-6 border-2 border-dashed border-purple-300 rounded-lg text-center hover:border-purple-500 hover:bg-purple-50 transition-all">
-                    {fileUploading ? (
-                      <div className="flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 animate-spin text-purple-600 mr-2" />
-                        <span className="text-purple-600">解析中...</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {environments.map(env => (
+                    <div
+                      key={env.id}
+                      className={`p-4 rounded-lg border transition-all cursor-pointer ${
+                        selectedEnv?.id === env.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                      onClick={() => handleSelectEnvironment(env)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900">{env.name}</h3>
+                          <p className="text-sm text-gray-500 mt-1">{env.company}</p>
+                          {env.address && (
+                            <p className="text-xs text-gray-400 mt-1">{env.address}</p>
+                          )}
+                        </div>
+                        {env.latitude && env.longitude && (
+                          <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
+                            <MapPin className="w-3 h-3 mr-1" />
+                            有地图
+                          </Badge>
+                        )}
                       </div>
-                    ) : (
-                      <>
-                        <Upload className="w-10 h-10 mx-auto text-purple-400 mb-2" />
-                        <p className="text-purple-600 font-medium">点击选择文件</p>
-                        <p className="text-xs text-gray-500 mt-1">支持 CSV、JSON 格式，数据需1分钟间隔</p>
-                      </>
+                      {env.latitude && env.longitude && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full mt-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleJumpToEnvironmentMap(env);
+                          }}
+                        >
+                          跳转地图
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 位置地图 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-red-500" />
+                  位置地图
+                </CardTitle>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <Input
+                      placeholder="搜索地区..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setShowResults(false);
+                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      className="w-48 h-8 text-sm pr-8"
+                    />
+                    <button
+                      onClick={handleSearch}
+                      disabled={searching || !searchQuery.trim()}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    >
+                      {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+                    </button>
+                    {showResults && searchResults.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border z-50 max-h-60 overflow-y-auto">
+                        {searchResults.map((result) => (
+                          <button
+                            key={result.id}
+                            onClick={() => handleSelectResult(result)}
+                            className="w-full px-3 py-2 text-left hover:bg-blue-50 text-sm border-b last:border-0 transition-colors"
+                          >
+                            <p className="font-medium text-gray-900 truncate">{result.name}</p>
+                            {result.district && (
+                              <p className="text-xs text-gray-500 truncate">{result.district}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
-                </label>
+                  <Button onClick={handleGetLocation} disabled={locationLoading || !mapReady} size="sm" variant="outline">
+                    {locationLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+                    GPS定位
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {locationError && (
+                <div className="mb-2 p-2 bg-yellow-50 text-yellow-700 rounded-lg text-sm">
+                  {locationError}
+                </div>
               )}
-            </div>
-          )}
-
-          {/* 蓝牙模式提示 */}
-          {uploadMode === 'bluetooth' && (
-            <div className="p-3 bg-blue-50 text-blue-700 rounded-lg text-sm">
-              {bluetoothConnected ? '设备已连接，开始测量后将每分钟自动记录数据' : '请先连接蓝牙设备'}
-            </div>
-          )}
-
-          {/* 测量控制 */}
-          <div className="flex items-center gap-4">
-            {!isMeasuring ? (
-              <Button 
-                onClick={handleStartMeasure} 
-                disabled={
-                  (uploadMode === 'bluetooth' && !bluetoothConnected) || // 蓝牙模式必须先连接
-                  !selectedEnv || 
-                  (uploadMode === 'file' && !filePreview)
-                }
-              >
-                <Play className="w-4 h-4 mr-2" />
-                开始测量
-              </Button>
-            ) : (
-              <Button onClick={handleStopMeasure} variant="destructive">
-                <Square className="w-4 h-4 mr-2" />
-                停止测量
-              </Button>
-            )}
-
-            {isMeasuring && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-lg">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                <Clock className="w-4 h-4 text-green-600" />
-                <span className="font-mono text-green-700">{formatTime(elapsedTime)}</span>
-              </div>
-            )}
-
-            {selectedEnv && (
-              <Badge variant="outline" className="ml-auto">
-                {selectedEnv.name}
-              </Badge>
-            )}
-          </div>
-
-          {/* 实时数据展示 */}
-          {isMeasuring && uploadMode === 'bluetooth' && (
-            <div className="grid grid-cols-3 gap-4 mt-4">
-              <div className="bg-orange-50 rounded-lg p-3 text-center">
-                <Thermometer className="w-5 h-5 text-orange-600 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-orange-700">{vitalData.tcr.toFixed(1)}°C</p>
-                <p className="text-xs text-gray-500">核心温度 Tcr</p>
-              </div>
-              <div className="bg-teal-50 rounded-lg p-3 text-center">
-                <ThermometerSun className="w-5 h-5 text-teal-600 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-teal-700">{vitalData.tsk.toFixed(1)}°C</p>
-                <p className="text-xs text-gray-500">皮肤温度 Tsk</p>
-              </div>
-              <div className="bg-red-50 rounded-lg p-3 text-center">
-                <Heart className="w-5 h-5 text-red-600 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-red-700">{vitalData.hr}</p>
-                <p className="text-xs text-gray-500">心率 HR (bpm)</p>
-              </div>
-            </div>
-          )}
-
-          {/* 上传状态 */}
-          {uploadStatus !== 'idle' && uploadStatus !== 'success' && (
-            <div className="flex items-center gap-2 text-sm">
-              {uploadStatus === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{uploadMessage}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ===== 位置地图 ===== */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-red-500" />
-              位置地图
-            </CardTitle>
-            <div className="flex gap-2">
               <div className="relative">
-                <Input
-                  placeholder="搜索地区..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setShowResults(false);
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  className="w-48 h-8 text-sm pr-8"
+                <div 
+                  ref={handleMapRef}
+                  className="h-80 rounded-lg border bg-gray-100"
                 />
-                <button
-                  onClick={handleSearch}
-                  disabled={searching || !searchQuery.trim()}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                >
-                  {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
-                </button>
-                {/* 搜索结果下拉 */}
-                {showResults && searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border z-50 max-h-60 overflow-y-auto">
-                    {searchResults.map((result) => (
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-full pointer-events-none">
+                  <div className="relative">
+                    <div className="w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full" />
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-red-500" />
+                  </div>
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-2 text-center">
+                {clickAddress ? `指针位置：${clickAddress}` : '拖动地图选择位置'}
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== 生命体征测量选项卡 ===== */}
+        <TabsContent value="vital" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                生命体征测量
+                <Badge variant={bluetoothConnected ? 'default' : 'outline'} className={`ml-2 ${bluetoothConnected ? 'bg-green-600' : ''}`}>
+                  <Bluetooth className="w-3 h-3 mr-1" />
+                  {connecting ? '连接中...' : bluetoothConnected ? '已连接' : '未连接'}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 环境选择 */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">选择测量环境</label>
+                {envsLoading ? (
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>加载中...</span>
+                  </div>
+                ) : environments.length === 0 ? (
+                  <p className="text-gray-400 text-sm">暂无可用环境</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {environments.map(env => (
                       <button
-                        key={result.id}
-                        onClick={() => handleSelectResult(result)}
-                        className="w-full px-3 py-2 text-left hover:bg-blue-50 text-sm border-b last:border-0 transition-colors"
+                        key={env.id}
+                        onClick={() => handleSelectEnvironment(env)}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                          selectedEnv?.id === env.id
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-200 hover:bg-gray-50'
+                        }`}
                       >
-                        <p className="font-medium text-gray-900 truncate">{result.name}</p>
-                        {result.district && (
-                          <p className="text-xs text-gray-500 truncate">{result.district}</p>
-                        )}
+                        <MapPin className="w-4 h-4 mr-1 inline" />
+                        {env.name}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
-              <Button onClick={handleGetLocation} disabled={locationLoading || !mapReady} size="sm" variant="outline">
-                {locationLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
-                GPS定位
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {locationError && (
-            <div className="mb-2 p-2 bg-yellow-50 text-yellow-700 rounded-lg text-sm">
-              {locationError}
-            </div>
-          )}
-          <div className="relative">
-            <div 
-              ref={handleMapRef}
-              className="h-80 rounded-lg border bg-gray-100"
-            />
-            {/* 中心指针 */}
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-full pointer-events-none">
-              <div className="relative">
-                <div className="w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full" />
-                </div>
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-red-500" />
+
+              {/* 上传方式 */}
+              <div className="flex gap-2">
+                <Button
+                  variant={uploadMode === 'bluetooth' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setUploadMode('bluetooth')}
+                >
+                  <Bluetooth className="w-4 h-4 mr-2" />
+                  蓝牙上传
+                </Button>
+                <Button
+                  variant={uploadMode === 'file' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setUploadMode('file')}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  文件上传
+                </Button>
+                {uploadMode === 'bluetooth' && (
+                  <Button
+                    variant={bluetoothConnected ? 'secondary' : 'outline'}
+                    size="sm"
+                    onClick={handleConnectBluetooth}
+                    disabled={connecting}
+                  >
+                    {connecting ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : bluetoothConnected ? (
+                      <XCircle className="w-4 h-4 mr-2" />
+                    ) : (
+                      <Bluetooth className="w-4 h-4 mr-2" />
+                    )}
+                    {bluetoothConnected ? '断开连接' : '连接设备'}
+                  </Button>
+                )}
               </div>
-            </div>
-          </div>
-          <p className="text-sm text-gray-500 mt-2 text-center">
-            {clickAddress ? `指针位置：${clickAddress}` : '拖动地图选择位置'}
-          </p>
-        </CardContent>
-      </Card>
+
+              {/* 文件上传界面 */}
+              {uploadMode === 'file' && (
+                <div className="p-4 bg-gray-50 rounded-lg space-y-4">
+                  {uploadedFile ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center p-3 bg-white rounded-lg border">
+                        <FileText className="w-8 h-8 text-purple-600 mr-3" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{uploadedFile.name}</p>
+                          <p className="text-xs text-gray-500">{(uploadedFile.size / 1024).toFixed(1)} KB</p>
+                        </div>
+                        <button onClick={() => { setUploadedFile(null); setFilePreview(null); }} className="p-1 hover:bg-gray-100 rounded">
+                          <X className="w-5 h-5 text-gray-400" />
+                        </button>
+                      </div>
+
+                      {filePreview && (
+                        <div className="p-3 bg-green-50 rounded-lg">
+                          <p className="text-sm font-medium text-green-700 mb-2">数据预览（1分钟间隔）：</p>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="text-center p-2 bg-white rounded">
+                              <p className="text-gray-500">核心温度 Tcr</p>
+                              <p className="font-bold text-orange-600">{filePreview.tcr.length} 条</p>
+                            </div>
+                            <div className="text-center p-2 bg-white rounded">
+                              <p className="text-gray-500">皮肤温度 Tsk</p>
+                              <p className="font-bold text-green-600">{filePreview.tsk.length} 条</p>
+                            </div>
+                            <div className="text-center p-2 bg-white rounded">
+                              <p className="text-gray-500">心率 HR</p>
+                              <p className="font-bold text-red-600">{filePreview.hr.length} 条</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {fileError && (
+                        <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                          {fileError}
+                        </div>
+                      )}
+
+                      {uploadStatus === 'success' && (
+                        <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center">
+                          <CheckCircle className="w-5 h-5 mr-2" />
+                          {uploadMessage}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <label className="block cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".csv,.json"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <div className="p-6 border-2 border-dashed border-purple-300 rounded-lg text-center hover:border-purple-500 hover:bg-purple-50 transition-all">
+                        {fileUploading ? (
+                          <div className="flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-purple-600 mr-2" />
+                            <span className="text-purple-600">解析中...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <Upload className="w-10 h-10 mx-auto text-purple-400 mb-2" />
+                            <p className="text-purple-600 font-medium">点击选择文件</p>
+                            <p className="text-xs text-gray-500 mt-1">支持 CSV、JSON 格式，数据需1分钟间隔</p>
+                          </>
+                        )}
+                      </div>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* 蓝牙模式提示 */}
+              {uploadMode === 'bluetooth' && (
+                <div className="p-3 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                  {bluetoothConnected ? '设备已连接，开始测量后将每分钟自动记录数据' : '请先连接蓝牙设备'}
+                </div>
+              )}
+
+              {/* 测量控制 */}
+              <div className="flex items-center gap-4">
+                {!isMeasuring ? (
+                  <Button 
+                    onClick={handleStartMeasure} 
+                    disabled={
+                      (uploadMode === 'bluetooth' && !bluetoothConnected) ||
+                      !selectedEnv || 
+                      (uploadMode === 'file' && !filePreview)
+                    }
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    开始测量
+                  </Button>
+                ) : (
+                  <Button onClick={handleStopMeasure} variant="destructive">
+                    <Square className="w-4 h-4 mr-2" />
+                    停止测量
+                  </Button>
+                )}
+
+                {isMeasuring && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-lg">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                    <Clock className="w-4 h-4 text-green-600" />
+                    <span className="font-mono text-green-700">{formatTime(elapsedTime)}</span>
+                  </div>
+                )}
+
+                {selectedEnv && (
+                  <Badge variant="outline" className="ml-auto">
+                    {selectedEnv.name}
+                  </Badge>
+                )}
+              </div>
+
+              {/* 实时数据展示 */}
+              {isMeasuring && uploadMode === 'bluetooth' && (
+                <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div className="bg-orange-50 rounded-lg p-3 text-center">
+                    <Thermometer className="w-5 h-5 text-orange-600 mx-auto mb-1" />
+                    <p className="text-2xl font-bold text-orange-700">{vitalData.tcr.toFixed(1)}°C</p>
+                    <p className="text-xs text-gray-500">核心温度 Tcr</p>
+                  </div>
+                  <div className="bg-teal-50 rounded-lg p-3 text-center">
+                    <ThermometerSun className="w-5 h-5 text-teal-600 mx-auto mb-1" />
+                    <p className="text-2xl font-bold text-teal-700">{vitalData.tsk.toFixed(1)}°C</p>
+                    <p className="text-xs text-gray-500">皮肤温度 Tsk</p>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-3 text-center">
+                    <Heart className="w-5 h-5 text-red-600 mx-auto mb-1" />
+                    <p className="text-2xl font-bold text-red-700">{vitalData.hr}</p>
+                    <p className="text-xs text-gray-500">心率 HR (bpm)</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 上传状态 */}
+              {uploadStatus !== 'idle' && uploadStatus !== 'success' && (
+                <div className="flex items-center gap-2 text-sm">
+                  {uploadStatus === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{uploadMessage}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* ===== 天气信息 ===== */}
       <Card>
@@ -976,7 +1007,6 @@ export default function ApplicantHomePage() {
                   <p className="text-sm text-gray-500">风力</p>
                 </div>
               </div>
-              {/* 数据来源 */}
               <div className="text-xs text-gray-400 text-center border-t pt-3 mt-3">
                 天气数据为模拟数据
               </div>
