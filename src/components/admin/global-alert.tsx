@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { AlertTriangle, Volume2, VolumeX } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 interface AlertUser {
   id: string;
@@ -28,92 +28,59 @@ let beepInterval: NodeJS.Timeout | null = null;
 let debugTimer: NodeJS.Timeout | null = null;
 let checkTimer: NodeJS.Timeout | null = null;
 
-// 记录已确认的异常用户（用于检测是否有新异常）
-let confirmedAlerts: Set<string> = new Set();
-
 export function GlobalAlertBanner() {
   const [alertUsers, setAlertUsers] = useState<AlertUser[]>([]);
   const [isAlerting, setIsAlerting] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [alertType, setAlertType] = useState<string>('');
   const [alertTrigger, setAlertTrigger] = useState<'start' | 'end' | null>(null);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  const [audioReady, setAudioReady] = useState(false);
 
   // 初始化音频上下文（需要用户交互）
   const initAudio = useCallback(() => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       audioContext = new AudioCtx();
-      setAudioReady(true);
       console.log('音频上下文已初始化');
     } catch (e) {
       console.error('音频初始化失败:', e);
     }
   }, []);
 
-  // 播放间歇性报警声音（哔-哔-哔）
+  // 播放持续报警声音
   const startBeep = useCallback(() => {
-    if (!audioReady || !audioContext) {
+    if (!audioContext) {
       console.log('音频未就绪');
       return;
     }
     if (isPlayingAudio) return;
     
-    let beepCount = 0;
-    const maxBeeps = 3;
-    
-    const playBeep = () => {
-      if (!audioContext || beepCount >= maxBeeps) {
-        isPlayingAudio = false;
-        return;
+    try {
+      // 停止之前的
+      if (oscillator) {
+        oscillator.stop();
+        oscillator.disconnect();
       }
       
-      try {
-        oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        
-        oscillator.connect(gain);
-        gain.connect(audioContext.destination);
-        oscillator.frequency.value = 1000;
-        oscillator.type = 'sine';
-        gain.gain.value = 0.3;
-        oscillator.start();
-        
-        // 哔0.2秒后停止
-        setTimeout(() => {
-          if (oscillator) {
-            oscillator.stop();
-            oscillator.disconnect();
-            oscillator = null;
-          }
-          beepCount++;
-          
-          // 0.5秒后再次哔
-          if (beepCount < maxBeeps) {
-            setTimeout(playBeep, 500);
-          } else {
-            isPlayingAudio = false;
-          }
-        }, 200);
-      } catch (e) {
-        console.error('播放失败:', e);
-        isPlayingAudio = false;
-      }
-    };
-    
-    isPlayingAudio = true;
-    playBeep();
-  }, [audioReady]);
+      oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.frequency.value = 880; // A5 音调
+      oscillator.type = 'square';
+      gain.gain.value = 0.15;
+      oscillator.start();
+      
+      isPlayingAudio = true;
+      console.log('声音开始');
+    } catch (e) {
+      console.error('播放失败:', e);
+    }
+  }, []);
 
   // 停止报警声音
   const stopBeep = useCallback(() => {
     isPlayingAudio = false;
-    
-    if (beepInterval) {
-      clearInterval(beepInterval);
-      beepInterval = null;
-    }
     
     try {
       if (oscillator) {
@@ -121,44 +88,21 @@ export function GlobalAlertBanner() {
         oscillator.disconnect();
         oscillator = null;
       }
-      if (audioContext) {
-        // 不关闭 audioContext，保持可用
-      }
       console.log('声音停止');
     } catch (e) {
       console.error('停止失败:', e);
     }
   }, []);
 
-  // 切换音频开关
-  const toggleAudio = useCallback(() => {
-    if (!audioReady) {
-      initAudio();
-      return;
-    }
-    setAudioEnabled(prev => !prev);
-  }, [audioReady, initAudio]);
-
-  // 确认报警（手动消除）
+  // 确认报警（手动消除声音）
   const confirmAlert = useCallback(() => {
     console.log('确认报警');
-    
-    // 记录当前异常用户
-    confirmedAlerts.clear();
-    alertUsers.forEach(u => confirmedAlerts.add(u.id + u.type));
-    
-    setIsConfirmed(true);
-    setIsAlerting(false);
-    setAlertUsers([]);
     stopBeep();
-    
-    // 3秒后隐藏横幅
-    setTimeout(() => {
-      setAlertTrigger(null);
-    }, 3000);
-    
+    setIsConfirmed(true);
+    setAlertUsers([]);
+    setIsAlerting(false);
     (window as any).__globalAlert = { users: [], isAlerting: false, isConfirmed: true };
-  }, [alertUsers, stopBeep]);
+  }, [stopBeep]);
 
   // 自动检测用户数据
   const checkUsers = useCallback(async () => {
@@ -201,47 +145,32 @@ export function GlobalAlertBanner() {
 
       const hasAlert = newAlerts.length > 0;
       
-      // 如果已确认过，检查是否有新的异常用户
-      if (isConfirmed) {
-        const hasNewAlert = newAlerts.some(u => !confirmedAlerts.has(u.id + u.type));
-        if (!hasNewAlert && hasAlert) {
-          // 异常用户没变，只显示横幅不响
-          if (!isAlerting) {
-            setIsAlerting(true);
-            setAlertUsers(newAlerts);
-            (window as any).__globalAlert = { users: newAlerts, isAlerting: true, isConfirmed: true };
-          }
-          return;
-        }
-        if (!hasAlert) {
-          // 数据恢复正常，清除确认状态
-          setIsConfirmed(false);
-          confirmedAlerts.clear();
-        }
-      }
-      
-      // 报警开始
-      if (hasAlert && !isAlerting) {
+      // 报警开始（自动播放声音）
+      if (hasAlert && !isAlerting && !isConfirmed) {
         setAlertTrigger('start');
-        setIsConfirmed(false);
         const hrAlert = newAlerts.find(u => u.type === 'hr');
         const tcrAlert = newAlerts.find(u => u.type === 'tcr');
         if (hrAlert) setAlertType(`HR=${hrAlert.value}≥180`);
         else if (tcrAlert) setAlertType(`Tcr=${tcrAlert.value}≥38`);
-        if (audioEnabled) startBeep();
+        startBeep();
         setIsAlerting(true);
         setAlertUsers(newAlerts);
         (window as any).__globalAlert = { users: newAlerts, isAlerting: true, isConfirmed: false };
       }
       
-      // 报警结束
-      if (!hasAlert && isAlerting) {
+      // 已确认状态下，异常还在但声音已停
+      if (hasAlert && isConfirmed) {
+        setAlertUsers(newAlerts);
+        (window as any).__globalAlert = { users: newAlerts, isAlerting: true, isConfirmed: true };
+      }
+      
+      // 恢复正常 - 报警结束
+      if (!hasAlert && (isAlerting || isConfirmed)) {
         setAlertTrigger('end');
         stopBeep();
         setIsAlerting(false);
-        setAlertUsers([]);
         setIsConfirmed(false);
-        confirmedAlerts.clear();
+        setAlertUsers([]);
         (window as any).__globalAlert = { users: [], isAlerting: false, isConfirmed: false };
         setTimeout(() => setAlertTrigger(null), 3000);
       }
@@ -249,7 +178,7 @@ export function GlobalAlertBanner() {
     } catch (error) {
       console.error('检查用户失败:', error);
     }
-  }, [isAlerting, isConfirmed, audioEnabled, startBeep, stopBeep]);
+  }, [isAlerting, isConfirmed, startBeep, stopBeep]);
 
   // 触发报警（调试用）
   const triggerAlert = useCallback((alert: AlertUser, duration = 10000) => {
@@ -259,27 +188,25 @@ export function GlobalAlertBanner() {
     if (checkTimer) clearInterval(checkTimer);
     
     setIsConfirmed(false);
-    confirmedAlerts.clear();
     setAlertUsers([alert]);
     setIsAlerting(true);
     setAlertTrigger('start');
     setAlertType(alert.type === 'hr' ? `HR=${alert.value}≥180` : `Tcr=${alert.value}≥38`);
-    if (audioEnabled) startBeep();
+    startBeep();
     (window as any).__globalAlert = { users: [alert], isAlerting: true, isConfirmed: false };
     
     debugTimer = setTimeout(() => {
       setAlertTrigger('end');
       setIsAlerting(false);
-      setAlertUsers([]);
       setIsConfirmed(false);
+      setAlertUsers([]);
       stopBeep();
       (window as any).__globalAlert = { users: [], isAlerting: false, isConfirmed: false };
       setTimeout(() => setAlertTrigger(null), 3000);
       
-      // 重新启动自动检测
       checkTimer = setInterval(checkUsers, 3000);
     }, duration);
-  }, [audioEnabled, startBeep, stopBeep, checkUsers]);
+  }, [startBeep, stopBeep, checkUsers]);
 
   // 清除报警
   const clearAlert = useCallback(() => {
@@ -336,14 +263,6 @@ export function GlobalAlertBanner() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* 音频开关按钮 */}
-          <button 
-            onClick={toggleAudio}
-            className="p-2 rounded hover:bg-white/20 transition"
-            title={audioReady ? (audioEnabled ? '关闭声音' : '开启声音') : '点击启用声音'}
-          >
-            {audioReady && audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-          </button>
           {/* 确认按钮 */}
           {isAlerting && !isConfirmed && (
             <button 
