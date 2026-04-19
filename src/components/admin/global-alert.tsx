@@ -89,24 +89,34 @@ export function GlobalAlertBanner() {
       const newAlerts: AlertUser[] = [];
 
       for (const user of users) {
-        const response = await fetch(`/api/vital-data?userId=${user.id}&limit=5`);
-        const result = await response.json();
+        // 分别查询 HR 和 TCR 数据
+        const [hrRes, tcrRes] = await Promise.all([
+          fetch(`/api/vital-data?userId=${user.id}&type=hr&limit=5`),
+          fetch(`/api/vital-data?userId=${user.id}&type=tcr&limit=5`)
+        ]);
+        const hrResult = await hrRes.json();
+        const tcrResult = await tcrRes.json();
         
-        if (result.success && result.data && result.data.length > 0) {
-          let latestHr = 0;
-          let latestTcr = 0;
-          
-          for (const record of result.data) {
-            if (record.data_type === 'hr') latestHr = parseFloat(record.value);
-            else if (record.data_type === 'tcr') latestTcr = parseFloat(record.value);
-          }
-          
-          if (latestHr >= 180) {
-            newAlerts.push({ id: user.id, username: user.username, type: 'hr', value: latestHr });
-          }
-          if (latestTcr >= 38) {
-            newAlerts.push({ id: user.id, username: user.username, type: 'tcr', value: latestTcr });
-          }
+        let latestHr = 0;
+        let latestTcr = 0;
+        
+        // 获取最新的 HR 值
+        if (hrResult.success && hrResult.data && hrResult.data.length > 0) {
+          const lastHr = hrResult.data[hrResult.data.length - 1];
+          latestHr = lastHr?.value || 0;
+        }
+        
+        // 获取最新的 TCR 值
+        if (tcrResult.success && tcrResult.data && tcrResult.data.length > 0) {
+          const lastTcr = tcrResult.data[tcrResult.data.length - 1];
+          latestTcr = lastTcr?.value || 0;
+        }
+        
+        if (latestHr >= 180) {
+          newAlerts.push({ id: user.id, username: user.username, type: 'hr', value: latestHr });
+        }
+        if (latestTcr >= 38) {
+          newAlerts.push({ id: user.id, username: user.username, type: 'tcr', value: latestTcr });
         }
       }
 
