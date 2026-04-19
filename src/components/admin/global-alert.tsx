@@ -46,6 +46,16 @@ export function GlobalAlertBanner() {
     }
   }, []);
 
+  // 用户点击时初始化音频
+  useEffect(() => {
+    const handleFirstClick = () => {
+      initAudio();
+      document.removeEventListener('click', handleFirstClick);
+    };
+    document.addEventListener('click', handleFirstClick, { once: true });
+    return () => document.removeEventListener('click', handleFirstClick);
+  }, [initAudio]);
+
   // 播放持续报警声音
   const startBeep = useCallback(() => {
     if (!audioContext) {
