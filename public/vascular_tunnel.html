@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDC-HEALTH · 血管内视</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,300;1,300&family=DM+Sans:wght@300;400&display=swap');
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;}
+body{font-family:'DM Sans',sans-serif;font-weight:300;color:#f0ece4;-webkit-font-smoothing:antialiased;}
+
+canvas{position:fixed;inset:0;display:block;}
+#c{z-index:1;}
+#c-grain{z-index:600;pointer-events:none;mix-blend-mode:overlay;opacity:.30;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:500;display:flex;justify-content:space-between;align-items:center;padding:26px 48px;}
+.logo{font-family:'Antonio',sans-serif;font-size:11px;letter-spacing:5px;font-weight:700;line-height:1.1;}
+.logo i{font-style:normal;display:block;font-weight:400;opacity:.55;letter-spacing:4px;}
+.nav-r{display:flex;align-items:center;gap:36px;}
+.nav-links{display:flex;gap:32px;list-style:none;}
+.nav-links a{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;text-decoration:none;color:#f0ece4;opacity:.42;transition:opacity .3s;}
+.nav-links a:hover{opacity:1;}
+.menu-btn{display:flex;align-items:center;gap:10px;opacity:.42;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;cursor:pointer;}
+.menu-btn:hover{opacity:1;}
+.menu-lines{display:flex;flex-direction:column;gap:4px;}
+.menu-lines span{display:block;width:16px;height:1px;background:#f0ece4;}
+
+/* SCROLL CONTAINER WITH SNAP */
+#scroll-wrap{
+  position:fixed;inset:0;overflow-y:scroll;z-index:100;
+  scroll-snap-type:y proximity;
+  scroll-behavior:smooth;
+}
+#scroll-wrap::-webkit-scrollbar{display:none;}
+.snap-sec{
+  height:100vh; width:100%;
+  scroll-snap-align:center;
+  scroll-snap-stop:normal;
+}
+
+/* ─── CHAPTER STAGE — text panel on the LEFT ─── */
+#chapter-stage{
+  position:fixed;left:0;top:0;bottom:0;width:38%;
+  z-index:215;pointer-events:none;
+}
+.chapter{
+  position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  padding:0 56px;opacity:0;
+  transition:opacity .55s ease;
+}
+.chapter.show{opacity:1;}
+.ch-prefix{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;}
+.ch-num{font-family:'Antonio',sans-serif;font-size:11px;letter-spacing:5px;font-weight:700;opacity:.7;}
+.ch-rule{flex:0 0 40px;height:1px;background:rgba(240,236,228,.4);position:relative;top:-3px;}
+.ch-cat{font-size:9px;letter-spacing:4px;font-weight:400;text-transform:uppercase;opacity:.55;}
+.ch-title{
+  font-family:'Antonio',sans-serif;font-weight:700;
+  font-size:clamp(30px,4.8vw,62px);
+  line-height:.96;letter-spacing:-.018em;text-transform:uppercase;
+  color:#f0ece4;max-width:480px;
+}
+.ch-title .ch-line{display:block;overflow:hidden;line-height:.96;}
+.ch-title .ch-line > span{display:inline-block;transform:translateY(110%);transition:transform .85s cubic-bezier(.2,.7,.1,1);}
+.chapter.show .ch-title .ch-line > span{transform:translateY(0);}
+.chapter.show .ch-title .ch-line:nth-child(2) > span{transition-delay:.12s;}
+.ch-desc{
+  margin-top:18px;max-width:340px;
+  font-family:'Cormorant Garamond',serif;font-style:italic;
+  font-size:14px;line-height:1.65;font-weight:300;opacity:0;
+  transform:translateY(14px);
+  transition:opacity .7s ease .35s, transform .7s ease .35s;
+}
+.chapter.show .ch-desc{opacity:.78;transform:translateY(0);}
+.chapter[data-zone="red"] .ch-num,.chapter[data-zone="red"] .ch-cat{color:#ff7a52;}
+.chapter[data-zone="blue"] .ch-num,.chapter[data-zone="blue"] .ch-cat{color:#7eb8ff;}
+.chapter[data-zone="mix"] .ch-num,.chapter[data-zone="mix"] .ch-cat{color:#d8a3d8;}
+
+/* HERO */
+#hero-stage{
+  position:fixed;left:0;top:0;bottom:0;width:38%;
+  z-index:214;pointer-events:none;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:0 56px;
+  transition:opacity .55s ease;
+}
+.h-tag{
+  font-family:'Antonio',sans-serif;font-size:10px;letter-spacing:4.5px;
+  font-weight:600;text-transform:uppercase;opacity:.55;margin-bottom:18px;
+}
+.h-line{
+  font-family:'Antonio',sans-serif;font-weight:700;
+  font-size:clamp(30px,5vw,64px);
+  line-height:.98;letter-spacing:-.018em;text-transform:uppercase;
+  color:#f0ece4;display:block;
+}
+.h-line.outline{-webkit-text-stroke:1px rgba(240,236,228,.55);-webkit-text-fill-color:transparent;}
+.h-line .word{display:inline-block;overflow:hidden;vertical-align:bottom;line-height:.98;}
+.h-line .word > span{display:inline-block;transform:translateY(110%);transition:transform 1.0s cubic-bezier(.2,.7,.1,1);}
+.h-line .word.in > span{transform:translateY(0);}
+.h-line.l1 .word > span{transition-delay:.10s;}
+.h-line.l2 .word > span{transition-delay:.30s;}
+.h-line.l3 .word > span{transition-delay:.50s;}
+.h-meta{margin-top:24px;max-width:320px;}
+.h-meta-tag{font-size:9px;letter-spacing:3.5px;text-transform:uppercase;opacity:.42;display:block;margin-bottom:8px;}
+.h-meta-text{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:13px;line-height:1.6;opacity:.78;}
+
+/* ─── TAB STAGE ─── */
+#tab-stage{position:fixed;inset:0;z-index:300;pointer-events:none;}
+.tab{
+  position:absolute;
+  display:flex;align-items:center;gap:14px;
+  pointer-events:all;cursor:pointer;
+  opacity:0;
+  user-select:none;
+  will-change:transform,opacity,filter;
+  /* Tabs are anchored at left:50%, top:50% — JS sets translate from there */
+  left:50%;top:50%;
+}
+/* Hide the supplementary text — canvas now renders the prominent labels */
+.tab .tab-txt{display:none;}
+.tab-disk{
+  width:62px;height:62px;flex-shrink:0;border-radius:50%;
+  border:1px solid rgba(255,255,255,.32);
+  background:rgba(0,0,0,.50);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;
+  transition:border-color .35s,background .35s,box-shadow .35s,transform .35s;
+}
+.tab-disk::before{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 35% 25%,rgba(255,255,255,.22),transparent 65%);
+}
+.tab-disk svg{width:20px;height:20px;stroke:rgba(255,255,255,.85);fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;position:relative;z-index:1;}
+
+.tab[data-color="red"].active .tab-disk{border-color:rgba(255,150,100,1);background:rgba(255,80,40,.22);box-shadow:0 0 50px rgba(255,90,50,.85);}
+.tab[data-color="blue"].active .tab-disk{border-color:rgba(150,210,255,1);background:rgba(60,140,255,.22);box-shadow:0 0 50px rgba(80,160,255,.85);}
+.tab[data-color="mix"].active .tab-disk{border-color:rgba(230,230,230,1);background:rgba(180,140,200,.20);box-shadow:0 0 50px rgba(200,100,200,.75);}
+
+.tab-txt{max-width:160px;}
+.tab-cat{font-family:'Antonio',sans-serif;font-size:10px;letter-spacing:3.8px;text-transform:uppercase;opacity:.7;display:block;margin-bottom:6px;font-weight:700;}
+.tab-name{font-family:'Antonio',sans-serif;font-size:15px;font-weight:700;line-height:1.18;text-transform:uppercase;letter-spacing:.5px;opacity:1;}
+.tab-num{font-size:8px;letter-spacing:2.5px;opacity:.45;display:block;margin-top:6px;font-feature-settings:'tnum';}
+
+/* LEFT STRIP */
+#left-strip{position:fixed;left:36px;top:50%;transform:translateY(-50%);z-index:320;display:flex;flex-direction:column;align-items:center;gap:0;}
+.ls-label{font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.5;writing-mode:vertical-rl;transform:rotate(180deg);margin-bottom:10px;font-weight:600;}
+.ls-track{width:1px;height:140px;background:rgba(255,255,255,.18);position:relative;}
+.ls-pip{width:7px;height:7px;border-radius:50%;position:absolute;left:50%;transform:translateX(-50%);transition:top .15s,background .6s,box-shadow .6s;}
+.ls-label2{font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.5;writing-mode:vertical-rl;transform:rotate(180deg);margin-top:10px;font-weight:600;}
+
+/* RIGHT STRIP — thermometer */
+#right-strip{position:fixed;right:36px;top:50%;transform:translateY(-50%);z-index:320;display:flex;flex-direction:column;align-items:center;gap:14px;}
+.rs-label{font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.5;writing-mode:vertical-rl;font-weight:600;}
+.thermo{position:relative;width:14px;height:170px;display:flex;flex-direction:column;align-items:center;}
+.thermo-tube{position:relative;width:6px;height:150px;border:1px solid rgba(255,255,255,.25);border-radius:3px;overflow:hidden;background:rgba(255,255,255,.03);}
+.thermo-fluid{position:absolute;left:0;right:0;bottom:0;border-radius:0 0 2px 2px;transition:height .35s, background .35s, box-shadow .4s;}
+.thermo-bulb{width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.25);margin-top:-2px;transition:background .4s, box-shadow .4s;}
+.thermo-tick{position:absolute;left:8px;width:5px;height:1px;background:rgba(255,255,255,.22);}
+.thermo-readout{font-family:'Antonio',sans-serif;font-size:18px;font-weight:600;letter-spacing:.5px;opacity:.85;font-feature-settings:'tnum';transition:color .4s;line-height:1;}
+.thermo-unit{font-size:8px;letter-spacing:2.5px;opacity:.45;text-transform:uppercase;}
+
+/* BOTTOM */
+#bottom{position:fixed;bottom:0;left:0;right:0;z-index:320;display:flex;justify-content:space-between;align-items:flex-end;padding:28px 48px 32px;background:linear-gradient(to top,rgba(0,0,0,.55),transparent);pointer-events:none;}
+#b-left{pointer-events:all;max-width:380px;}
+.b-tag{font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:3.5px;text-transform:uppercase;opacity:.5;display:block;margin-bottom:8px;font-weight:600;}
+.b-quote-row{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:13px;line-height:1.55;opacity:.65;max-width:480px;margin-bottom:12px;transition:opacity .4s;}
+.b-read{font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.5;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:'Antonio',sans-serif;font-weight:600;}
+.b-read:hover{opacity:1;}
+.b-arrow{transition:transform .3s;display:inline-block;}
+.b-read:hover .b-arrow{transform:translateX(5px);}
+#b-right{text-align:right;max-width:230px;pointer-events:all;}
+.b-progress{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-bottom:10px;}
+.b-step{font-family:'Antonio',sans-serif;font-size:11px;letter-spacing:3px;font-weight:700;opacity:.85;font-feature-settings:'tnum';}
+.b-step .b-of{opacity:.45;font-weight:400;}
+.b-bar{width:80px;height:1px;background:rgba(255,255,255,.20);position:relative;}
+.b-bar-fill{position:absolute;left:0;top:0;height:100%;background:#f0ece4;transition:width .5s;}
+.b-coords{font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:2.5px;opacity:.32;text-transform:uppercase;font-weight:600;}
+
+/* ANNOTATION CARDS - Apple Style */
+.annotation-card {
+  position: absolute;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 0;
+  width: 280px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  pointer-events: none;
+  z-index: 50;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+.annotation-card.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.annotation-card .ac-image {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+.annotation-card .ac-content {
+  padding: 16px;
+}
+.annotation-card .ac-title {
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.annotation-card .ac-desc {
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.annotation-card .ac-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.annotation-card .ac-tag {
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 10px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.annotation-card .ac-line {
+  position: absolute;
+  width: 60px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3));
+}
+.annotation-card .ac-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Chapter annotations positioned */
+#ch0 .annotation-card { right: -320px; top: 50%; transform: translateY(-50%) translateY(20px); }
+#ch0 .annotation-card.show { transform: translateY(-50%) translateY(0); }
+#ch1 .annotation-card { right: -320px; top: 50%; transform: translateY(-50%) translateY(20px); }
+#ch1 .annotation-card.show { transform: translateY(-50%) translateY(0); }
+#ch2 .annotation-card { right: -320px; top: 50%; transform: translateY(-50%) translateY(20px); }
+#ch2 .annotation-card.show { transform: translateY(-50%) translateY(0); }
+#ch3 .annotation-card { right: -320px; top: 50%; transform: translateY(-50%) translateY(20px); }
+#ch3 .annotation-card.show { transform: translateY(-50%) translateY(0); }
+#ch4 .annotation-card { right: -320px; top: 50%; transform: translateY(-50%) translateY(20px); }
+#ch4 .annotation-card.show { transform: translateY(-50%) translateY(0); }
+
+/* FOOTER */
+#foot{position:fixed;bottom:0;left:0;right:0;z-index:320;display:flex;justify-content:space-between;padding:0 48px 14px;pointer-events:none;}
+.f-copy{font-family:'Antonio',sans-serif;font-size:8px;letter-spacing:2px;opacity:.22;text-transform:uppercase;font-weight:600;}
+.f-social{display:flex;gap:18px;}
+.f-social a{font-family:'Antonio',sans-serif;font-size:8px;letter-spacing:2.5px;text-transform:uppercase;text-decoration:none;color:#f0ece4;opacity:.22;transition:opacity .3s;pointer-events:all;font-weight:600;}
+.f-social a:hover{opacity:.65;}
+
+/* SCROLL HINT */
+#hint{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);z-index:340;font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:4px;text-transform:uppercase;opacity:0;display:flex;align-items:center;gap:10px;pointer-events:none;font-weight:600;transition:opacity 1s ease;}
+#hint.show{animation:hintFade 2.6s infinite ease-in-out;}
+@keyframes hintFade{0%,100%{opacity:.18;}50%{opacity:.6;}}
+.hint-arrow{display:inline-block;width:1px;height:14px;background:#f0ece4;position:relative;}
+.hint-arrow::after{content:'';position:absolute;left:-3px;bottom:0;width:7px;height:7px;border-right:1px solid #f0ece4;border-bottom:1px solid #f0ece4;transform:rotate(45deg);}
+
+/* INTRO OVERLAY */
+#intro{position:fixed;inset:0;z-index:9000;background:#000;pointer-events:all;transition:opacity 1.6s ease;overflow:hidden;}
+#intro.fading{opacity:0;pointer-events:none;}
+#intro-cv{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.i-mark{position:absolute;top:32px;left:48px;z-index:10;font-family:'Antonio',sans-serif;font-size:11px;letter-spacing:5px;font-weight:700;line-height:1.1;opacity:0;transition:opacity 1.0s ease;color:#f0ece4;}
+.i-mark i{font-style:normal;display:block;font-weight:400;opacity:.6;letter-spacing:4px;}
+#intro.show-mark .i-mark{opacity:1;}
+.i-skip{position:absolute;top:32px;right:48px;z-index:10;font-family:'Antonio',sans-serif;font-size:10px;letter-spacing:3px;font-weight:600;text-transform:uppercase;opacity:0;cursor:pointer;color:#f0ece4;background:none;border:1px solid rgba(240,236,228,.3);padding:8px 16px;border-radius:2px;transition:opacity .8s ease, border-color .25s, background .25s;pointer-events:all;}
+.i-skip:hover{border-color:rgba(240,236,228,.7);background:rgba(240,236,228,.05);}
+#intro.show-skip .i-skip{opacity:.65;}
+.i-title-wrap{position:absolute;left:0;right:0;bottom:42%;z-index:10;display:flex;flex-direction:column;align-items:center;gap:14px;pointer-events:none;}
+.i-tag{font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:5px;font-weight:600;text-transform:uppercase;opacity:0;color:#f0ece4;transition:opacity 1.4s ease;}
+.i-title{font-family:'Antonio',sans-serif;font-size:clamp(28px,4.5vw,56px);font-weight:700;letter-spacing:.5px;text-transform:uppercase;line-height:1;color:#f0ece4;text-align:center;opacity:0;transform:translateY(8px);transition:opacity 1.4s ease, transform 1.4s ease;}
+#intro.show-title .i-tag{opacity:.55;}
+#intro.show-title .i-title{opacity:1;transform:translateY(0);}
+.i-prompt-wrap{position:absolute;left:0;right:0;bottom:18%;z-index:10;display:flex;justify-content:center;pointer-events:none;}
+.i-prompt{display:flex;align-items:center;gap:12px;font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:3px;font-weight:600;text-transform:uppercase;opacity:0;color:#f0ece4;background:rgba(240,236,228,.06);border:1px solid rgba(240,236,228,.22);padding:13px 22px;border-radius:2px;cursor:pointer;transition:opacity 1s ease, border-color .25s, background .25s;pointer-events:all;}
+.i-prompt:hover{border-color:rgba(240,236,228,.5);background:rgba(240,236,228,.10);}
+#intro.show-prompt .i-prompt{opacity:1;}
+.i-pulse{width:7px;height:7px;border-radius:50%;background:#ff7a52;box-shadow:0 0 10px rgba(255,122,82,.8);animation:iPulse 1.4s infinite ease-in-out;}
+@keyframes iPulse{0%,100%{opacity:.45;transform:scale(.8);}50%{opacity:1;transform:scale(1.15);}}
+
+/* SOUND TOGGLE */
+#snd-tog{position:fixed;left:36px;bottom:36px;z-index:340;display:flex;align-items:center;gap:8px;font-family:'Antonio',sans-serif;font-size:9px;letter-spacing:2.5px;font-weight:600;text-transform:uppercase;color:#f0ece4;opacity:0;cursor:pointer;transition:opacity .8s ease;pointer-events:all;background:none;border:none;padding:6px;}
+#snd-tog.shown{opacity:.45;}
+#snd-tog.shown:hover{opacity:.95;}
+#snd-tog svg{width:14px;height:14px;stroke:#f0ece4;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;}
+#snd-tog .snd-on,#snd-tog .snd-off{display:none;}
+#snd-tog.on .snd-on{display:inline;}
+#snd-tog.off .snd-off{display:inline;}
+
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<canvas id="c-grain"></canvas>
+
+<!-- 6 SNAP SECTIONS — entry + 5 tabs -->
+<div id="scroll-wrap">
+  <div class="snap-sec" data-stop="0"></div>
+  <div class="snap-sec" data-stop="1"></div>
+  <div class="snap-sec" data-stop="2"></div>
+  <div class="snap-sec" data-stop="3"></div>
+  <div class="snap-sec" data-stop="4"></div>
+  <div class="snap-sec" data-stop="5"></div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">CDC—HEALTH<i>智能体征监测 / 2026</i></div>
+  <div class="nav-r">
+    <ul class="nav-links">
+      <li><a href="#">首页</a></li>
+      <li><a href="#">产品</a></li>
+      <li><a href="#">应用</a></li>
+      <li><a href="#">联系</a></li>
+    </ul>
+    <div class="menu-btn"><div class="menu-lines"><span></span><span></span></div>菜单</div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div id="hero-stage">
+  <div class="h-tag">[ 智能贴片 · 高温作业生理监测 ]</div>
+  <span class="h-line l1"><span class="word"><span>读懂身体</span></span></span>
+  <span class="h-line l2 outline"><span class="word"><span>的温度</span></span></span>
+  <span class="h-line l3"><span class="word"><span>与节律。</span></span></span>
+  <div class="h-meta">
+    <span class="h-meta-tag">— 一片轻如羽的守护</span>
+    <span class="h-meta-text">下滑进入身体内部 — 跟随血流穿越，看一片胶片如何记录每一次心跳与体温的细微变化。</span>
+  </div>
+</div>
+
+<!-- CHAPTERS -->
+<div id="chapter-stage">
+  <div class="chapter" id="ch0" data-zone="red">
+    <div class="ch-prefix"><span class="ch-num">01</span><span class="ch-rule"></span><span class="ch-cat">产品</span></div>
+    <div class="ch-title"><span class="ch-line"><span>智能贴片</span></span><span class="ch-line"><span>无感佩戴</span></span></div>
+    <div class="ch-desc">柔性医用胶贴片，重量 8 克，可连续佩戴 7 天。在 50℃ 高温车间、防护服内仍稳定工作。</div>
+    <!-- 标注卡片 -->
+    <div class="annotation-card">
+      <img class="ac-image" src="https://images.unsplash.com/photo-1559757175-5700dde675bc?w=400&h=200&fit=crop" alt="智能贴片">
+      <div class="ac-content">
+        <div class="ac-title">PEDOT:PSS 柔性传感</div>
+        <div class="ac-desc">基于有机导电高分子材料，实现完全有机的柔性导电传感，生物相容性极佳。</div>
+        <div class="ac-tags">
+          <span class="ac-tag">±0.1℃精度</span>
+          <span class="ac-tag">7天续航</span>
+          <span class="ac-tag">8克超轻</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chapter" id="ch1" data-zone="red">
+    <div class="ch-prefix"><span class="ch-num">02</span><span class="ch-rule"></span><span class="ch-cat">监测</span></div>
+    <div class="ch-title"><span class="ch-line"><span>核心体温</span></span><span class="ch-line"><span>实时追踪</span></span></div>
+    <div class="ch-desc">每秒采集皮温，结合算法推算核心体温，精度 ±0.1℃。临近热应激阈值时立即推送预警。</div>
+    <!-- 标注卡片 -->
+    <div class="annotation-card">
+      <img class="ac-image" src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=200&fit=crop" alt="体温监测">
+      <div class="ac-content">
+        <div class="ac-title">核心体温计算模型</div>
+        <div class="ac-desc">综合环境温度、湿度、风速、劳动强度等多维数据，实时推算核心体温变化趋势。</div>
+        <div class="ac-tags">
+          <span class="ac-tag">秒级采样</span>
+          <span class="ac-tag">热应激预警</span>
+          <span class="ac-tag">AD/AV/TCR</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chapter" id="ch2" data-zone="mix">
+    <div class="ch-prefix"><span class="ch-num">03</span><span class="ch-rule"></span><span class="ch-cat">应用</span></div>
+    <div class="ch-title"><span class="ch-line"><span>高温作业</span></span><span class="ch-line"><span>全场景护航</span></span></div>
+    <div class="ch-desc">已部署于钢厂、电力检修、消防应急、地下隧道作业 — 热相关疾病发生率下降 60%。</div>
+    <!-- 标注卡片 -->
+    <div class="annotation-card">
+      <img class="ac-image" src="https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=400&h=200&fit=crop" alt="高温作业">
+      <div class="ac-content">
+        <div class="ac-title">全场景应用覆盖</div>
+        <div class="ac-desc">从钢厂到消防，从电力检修到隧道施工，为高温作业人员提供全方位保护。</div>
+        <div class="ac-tags">
+          <span class="ac-tag">钢厂</span>
+          <span class="ac-tag">电力</span>
+          <span class="ac-tag">消防</span>
+          <span class="ac-tag">建筑</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chapter" id="ch3" data-zone="blue">
+    <div class="ch-prefix"><span class="ch-num">04</span><span class="ch-rule"></span><span class="ch-cat">数据</span></div>
+    <div class="ch-title"><span class="ch-line"><span>云端</span></span><span class="ch-line"><span>多端协同</span></span></div>
+    <div class="ch-desc">班组大屏 / 移动端 / 管理后台三端联动。历史数据可追溯，为职业健康档案提供客观依据。</div>
+    <!-- 标注卡片 -->
+    <div class="annotation-card">
+      <img class="ac-image" src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=200&fit=crop" alt="数据云端">
+      <div class="ac-content">
+        <div class="ac-title">三端联动 · 数据协同</div>
+        <div class="ac-desc">班组大屏实时监控，移动端随时查看，管理后台数据分析，三位一体守护安全。</div>
+        <div class="ac-tags">
+          <span class="ac-tag">实时大屏</span>
+          <span class="ac-tag">移动端</span>
+          <span class="ac-tag">云存储</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chapter" id="ch4" data-zone="blue">
+    <div class="ch-prefix"><span class="ch-num">05</span><span class="ch-rule"></span><span class="ch-cat">关于</span></div>
+    <div class="ch-title"><span class="ch-line"><span>让每个</span></span><span class="ch-line"><span>劳动者归家</span></span></div>
+    <div class="ch-desc">职业病防治专家、可穿戴硬件工程师与数据科学家共同打造 — 把生理学翻译成一线可用的安全工具。</div>
+    <!-- 标注卡片 -->
+    <div class="annotation-card">
+      <img class="ac-image" src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400&h=200&fit=crop" alt="健康守护">
+      <div class="ac-content">
+        <div class="ac-title">科技守护 · 健康归家</div>
+        <div class="ac-desc">每一次预警，都是为了劳动者能平安回家。我们用科技守护每一个生命。</div>
+        <div class="ac-tags">
+          <span class="ac-tag">职业健康</span>
+          <span class="ac-tag">热应激防护</span>
+          <span class="ac-tag">智能预警</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TABS 已移除 -->
+
+<!-- LEFT STRIP -->
+<div id="left-strip">
+  <span class="ls-label">高温</span>
+  <div class="ls-track"><div class="ls-pip" id="pip"></div></div>
+  <span class="ls-label2">舒适</span>
+</div>
+
+<!-- RIGHT STRIP -->
+<div id="right-strip">
+  <span class="rs-label">核心体温</span>
+  <div class="thermo">
+    <div class="thermo-tube">
+      <div class="thermo-fluid" id="thermo-fluid"></div>
+      <div class="thermo-tick" style="top:14%"></div>
+      <div class="thermo-tick" style="top:38%"></div>
+      <div class="thermo-tick" style="top:62%"></div>
+      <div class="thermo-tick" style="top:86%"></div>
+    </div>
+    <div class="thermo-bulb" id="thermo-bulb"></div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+    <span class="thermo-readout" id="thermo-val">42.0°</span>
+    <span class="thermo-unit">摄氏度</span>
+  </div>
+</div>
+
+<!-- BOTTOM -->
+<div id="bottom">
+  <div id="b-left">
+    <span class="b-tag">— 当前阶段</span>
+    <div class="b-quote-row" id="bq">让每一位高温作业者，安全归家。</div>
+    <div class="b-read">查看产品 <span class="b-arrow">→</span></div>
+  </div>
+  <div id="b-right">
+    <div class="b-progress">
+      <span class="b-step"><span id="b-step-num">01</span><span class="b-of"> / 05</span></span>
+      <div class="b-bar"><div class="b-bar-fill" id="b-bar-fill"></div></div>
+    </div>
+    <div class="b-coords">CDC-HEALTH · MADE IN CN</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div id="foot">
+  <span class="f-copy">© CDC-HEALTH 2026 — 高温作业生理监测</span>
+  <div class="f-social"><a href="#">微信</a><a href="#">微博</a><a href="#">联系</a></div>
+</div>
+
+<!-- SCROLL HINT -->
+<div id="hint">下滑穿越血管 <span class="hint-arrow"></span></div>
+
+<!-- SOUND TOGGLE (visible after intro) -->
+<button id="snd-tog" class="off" aria-label="切换声音">
+  <svg class="snd-on" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+  <svg class="snd-off" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+  <span class="snd-label">声音 关</span>
+</button>
+
+<!-- INTRO CEREMONY -->
+<div id="intro">
+  <canvas id="intro-cv"></canvas>
+  <div class="i-mark">CDC—HEALTH<i>智能体征监测 / 2026</i></div>
+  <button class="i-skip" id="i-skip">跳过 →</button>
+  <div class="i-title-wrap">
+    <span class="i-tag">— 智能贴片 · 高温作业生理监测</span>
+    <h1 class="i-title">读懂身体的<br>温度与节律</h1>
+  </div>
+  <div class="i-prompt-wrap">
+    <button class="i-prompt" id="i-prompt">
+      <span class="i-pulse"></span>
+      <span>点击进入 · 开启声音</span>
+    </button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════
+// CANVAS
+// ═══════════════════════════════════════════════════════════════════════
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const gn=document.getElementById('c-grain'),gctx=gn.getContext('2d');
+let W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,1.6);
+
+function resize(){
+  W=innerWidth; H=innerHeight;
+  cv.width=W*DPR; cv.height=H*DPR;
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  gn.width=W; gn.height=H;
+  rebuildTunnel();
+  rebuildRBCs();
+}
+window.addEventListener('resize',resize);
+
+let MX=W/2, MY=H/2, tMX=0,tMY=0,sMX=0,sMY=0;
+document.addEventListener('mousemove',e=>{
+  MX=e.clientX; MY=e.clientY;
+  tMX=(e.clientX/innerWidth-.5)*2; tMY=(e.clientY/innerHeight-.5)*2;
+});
+
+// SCROLL — driven by snap sections (6 stops, P 0..1)
+let P=0, Pd=0;
+const sw=document.getElementById('scroll-wrap');
+sw.addEventListener('scroll',()=>{
+  const max=sw.scrollHeight - innerHeight;
+  P=Math.min(1,Math.max(0,sw.scrollTop/max));
+  updateUI();
+});
+
+function lerpRaw(a,b,t){return a+(b-a)*t;}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function easeOutCubic(t){return 1-Math.pow(1-clamp(t,0,1),3);}
+function smoothstep(a,b,x){const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PALETTE — red ↔ blue WITHOUT going through purple
+// Path: red → near-black → blue
+// ═══════════════════════════════════════════════════════════════════════
+function getPalette(p){
+  // Saturation weight: 1 at edges (p=0 or p=1), 0 at middle (p=0.5)
+  // Use a slightly sharper curve so the "dark middle" is shorter
+  const sat = Math.pow(Math.abs(p-0.5)*2, 0.7);
+
+  // Pure black (used to mute the middle)
+  const blk = [3, 3, 8];
+  // Red zone targets
+  const redInner = [255, 235, 200];
+  const redMid   = [240, 50, 25];
+  const redDeep  = [80, 6, 8];
+  // Blue zone targets
+  const blueInner = [220, 240, 255];
+  const blueMid   = [25, 110, 220];
+  const blueDeep  = [4, 18, 70];
+
+  function pick(redCol, blueCol){
+    const target = p<0.5 ? redCol : blueCol;
+    return [
+      lerpRaw(blk[0], target[0], sat),
+      lerpRaw(blk[1], target[1], sat),
+      lerpRaw(blk[2], target[2], sat),
+    ];
+  }
+  const inner = pick(redInner, blueInner);
+  const mid   = pick(redMid,   blueMid);
+  const deep  = pick(redDeep,  blueDeep);
+
+  // True base zone color (for tinting cells, etc) — fully saturated
+  const baseColor = p<0.5 ? redMid : blueMid;
+  return {inner, mid, deep, sat, baseColor};
+}
+
+function rgba(c, a){return `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TUNNEL — geometrically-spaced rings with SHARED global ridges
+// (longitudinal continuity), filled annular polygons
+// ═══════════════════════════════════════════════════════════════════════
+const POINTS_PER_RING = 64;
+const RING_COUNT = 36;
+let RINGS = [];
+let GLOBAL_RIDGES = []; // shared perturbation pattern indexed by angle slot
+
+function rebuildTunnel(){
+  // Build the global ridge profile ONCE — same across all rings
+  // creates longitudinal stripes (folds running along the tunnel axis)
+  GLOBAL_RIDGES = [];
+  for(let k=0;k<POINTS_PER_RING;k++){
+    const a = (k/POINTS_PER_RING)*Math.PI*2;
+    // Multiple smooth waves layered — gives organic tissue ridges (slightly amplified)
+    const w1 = Math.sin(a*4 + 0.7)*0.075;
+    const w2 = Math.sin(a*7 + 2.3)*0.045;
+    const w3 = Math.sin(a*11 + 4.1)*0.025;
+    GLOBAL_RIDGES.push(w1 + w2 + w3);
+  }
+
+  // Geometric ring spacing — z_(i+1) = z_i * ratio
+  // This gives uniform visual spacing (perspective-correct)
+  RINGS = [];
+  const Z_NEAR = 0.50;
+  const Z_FAR = 14.0;
+  const ratio = Math.pow(Z_FAR/Z_NEAR, 1/(RING_COUNT-1));
+  for(let i=0;i<RING_COUNT;i++){
+    const z = Z_NEAR * Math.pow(ratio, i);
+    const angles = [];
+    const localPerturb = [];
+    for(let k=0;k<POINTS_PER_RING;k++){
+      angles.push((k/POINTS_PER_RING)*Math.PI*2);
+      // Tiny per-ring random for organic variation (less than global)
+      localPerturb.push((Math.random()-.5)*0.025);
+    }
+    RINGS.push({
+      z, baseZ:z, angles, localPerturb,
+      phase: Math.random()*Math.PI*2,
+      ratioToNext: ratio,
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RBCs — regular small ones drift in stream
+// ═══════════════════════════════════════════════════════════════════════
+const RBC_COUNT = 50;
+let RBCS = [];
+function rebuildRBCs(){
+  RBCS = [];
+  for(let i=0;i<RBC_COUNT;i++){
+    RBCS.push(makeRBC(0.5 + Math.random()*13.5));
+  }
+}
+function makeRBC(z, sizeMul=1){
+  const a = Math.random()*Math.PI*2;
+  const r = Math.random()*0.42; // keep inside tunnel (radius < 0.45)
+  return {
+    x: Math.cos(a)*r,
+    y: Math.sin(a)*r,
+    z: z,
+    rot: Math.random()*Math.PI*2,
+    rotSpeed: (Math.random()-.5)*0.7,
+    tilt: Math.random()*Math.PI*2,
+    tiltSpeed: (Math.random()-.5)*0.5,
+    drift: Math.random()*Math.PI*2,
+    sz: (0.04 + Math.random()*0.025) * sizeMul,
+    feature: false,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// FILM GRAIN
+// ═══════════════════════════════════════════════════════════════════════
+const grainTiles=[];
+(function(){for(let k=0;k<6;k++){
+  const tc=document.createElement('canvas'); tc.width=tc.height=180;
+  const tx=tc.getContext('2d');
+  const id=tx.createImageData(180,180);
+  for(let i=0;i<id.data.length;i+=4){
+    const v=Math.random()*255|0;
+    id.data[i]=id.data[i+1]=id.data[i+2]=v;
+    id.data[i+3]=Math.random()*60|0;
+  }
+  tx.putImageData(id,0,0); grainTiles.push(tc);
+}})();
+let grainFrame=0;
+function drawGrain(){
+  grainFrame=(grainFrame+1)%grainTiles.length;
+  const tile=grainTiles[grainFrame];
+  gctx.clearRect(0,0,W,H);
+  for(let x=0;x<W;x+=180) for(let y=0;y<H;y+=180) gctx.drawImage(tile,x,y);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// HERO ENTRANCE
+// ═══════════════════════════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  document.querySelectorAll('.h-line .word').forEach((w,i)=>{
+    setTimeout(()=>w.classList.add('in'), 180 + i*180);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// TUNNEL CONFIG
+// ═══════════════════════════════════════════════════════════════════════
+// 6 snap stops in scroll. P stops: 0, 0.2, 0.4, 0.6, 0.8, 1.0
+// We map cameraZ = P * TUNNEL_LENGTH
+// At each tab P, tab is at "ideal" z (= 1.5)
+// So tab.baseZ = (P_active * TUNNEL_LENGTH) + 1.5
+const TUNNEL_LENGTH = 10;
+const IDEAL_Z = 1.5;
+const TUNNEL_R = 1.0;
+
+// Tab positions — all centered (x=0, y=0). They emerge from vanishing point.
+// Each tab also has TEXT LABELS that render on the canvas above its feature RBC.
+const TAB_CFG=[
+  { id:'tab0', activeP: 0.20, numLabel:'01', catLabel:'产品',
+    titleLabel:'智能贴片', subLabel:'8 克 · 7 天连续佩戴' },
+  { id:'tab1', activeP: 0.40, numLabel:'02', catLabel:'监测',
+    titleLabel:'核心体温', subLabel:'精度 ±0.1℃ · 实时预警' },
+  { id:'tab2', activeP: 0.60, numLabel:'03', catLabel:'应用',
+    titleLabel:'高温场景', subLabel:'钢厂 · 电力 · 消防' },
+  { id:'tab3', activeP: 0.80, numLabel:'04', catLabel:'数据',
+    titleLabel:'云端管理', subLabel:'三端协同 · 全程可追溯' },
+  { id:'tab4', activeP: 1.00, numLabel:'05', catLabel:'关于',
+    titleLabel:'我们的使命', subLabel:'让每个劳动者安全归家' },
+];
+TAB_CFG.forEach(c=>{
+  c.baseZ = c.activeP * TUNNEL_LENGTH + IDEAL_Z;
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAIN DRAW
+// ═══════════════════════════════════════════════════════════════════════
+let time=0, prevTime=performance.now();
+let cameraZ=0;
+let activeTabIndex = -1;
+
+function draw(now){
+  requestAnimationFrame(draw);
+  const dt=Math.min((now-prevTime)/1000,.05);
+  prevTime=now;
+  time+=dt;
+
+  Pd += (P-Pd)*.10;
+  sMX+=(tMX-sMX)*.04;
+  sMY+=(tMY-sMY)*.04;
+
+  // Camera advances based on smoothed P — plus tiny ambient drift
+  cameraZ = Pd * TUNNEL_LENGTH + time * 0.04;
+
+  const cx = W/2 + sMX*15;
+  const cy = H/2 + sMY*10;
+  const FOCAL = Math.min(W,H) * 0.62;
+
+  ctx.clearRect(0,0,W,H);
+
+  // ── BACKGROUND base ──
+  const pal = getPalette(Pd);
+  ctx.fillStyle = `rgb(${(pal.deep[0]*0.4)|0},${(pal.deep[1]*0.4)|0},${(pal.deep[2]*0.4)|0})`;
+  ctx.fillRect(0,0,W,H);
+
+  // ── DEEP RADIAL VANISHING-POINT GLOW ──
+  // (creates the volumetric backlight)
+  const lightR = Math.max(W,H) * 0.55;
+  const pulse = 0.88 + Math.sin(time*1.4)*0.10;
+  const lightG = ctx.createRadialGradient(cx, cy, 0, cx, cy, lightR);
+  lightG.addColorStop(0,    rgba(pal.inner, 0.85*pulse));
+  lightG.addColorStop(0.08, rgba(pal.inner, 0.65*pulse));
+  lightG.addColorStop(0.22, rgba(pal.mid,   0.40*pulse));
+  lightG.addColorStop(0.45, rgba(pal.deep,  0.25*pulse));
+  lightG.addColorStop(1.0,  rgba(pal.deep, 0));
+  ctx.fillStyle = lightG;
+  ctx.fillRect(0,0,W,H);
+
+  // ── TUNNEL WALLS — filled annular gradients, far to near ──
+  // Compute each ring's effective z, recycle if needed
+  const drawRings = [];
+  const range = RINGS[RINGS.length-1].baseZ - RINGS[0].baseZ;
+  for(const r of RINGS){
+    let effZ = r.baseZ - cameraZ;
+    // Recycle: keep z within [Z_NEAR, Z_FAR + range]
+    while(effZ < 0.40) effZ += range;
+    while(effZ > 14 + range) effZ -= range;
+    if(effZ < 0.40 || effZ > 18) continue;
+    drawRings.push({ring:r, z:effZ});
+  }
+  drawRings.sort((a,b) => b.z - a.z); // far first
+
+  // Draw each ring as a FILLED annular ring with radial gradient
+  for(const dr of drawRings){
+    const r = dr.ring;
+    const z = dr.z;
+    const scale = FOCAL / z;
+    const outerR = TUNNEL_R * scale;
+    if(outerR < 6) continue;
+    // Inner radius — chosen so adjacent rings overlap slightly
+    // ratio gives the "next ring" size; we want innerR ≈ outerR / ratio (=> close adj. ring's outer)
+    // Pick a slightly tighter inner for guaranteed continuity
+    const innerR = outerR / (1 + (r.ratioToNext-1)*1.4);
+
+    // Gradient: bright inner edge (light from center), dark outer edge (vessel wall depth)
+    // Use depth-based color mix: closer rings (small z) → more saturated, far rings → washed by inner light
+    const tFar = clamp(z / 12, 0, 1);  // 0=close, 1=far
+    // Wall body color
+    const wallR = lerpRaw(pal.mid[0], pal.inner[0], tFar*0.85);
+    const wallG = lerpRaw(pal.mid[1], pal.inner[1], tFar*0.85);
+    const wallB = lerpRaw(pal.mid[2], pal.inner[2], tFar*0.85);
+    // Wall edge dark
+    const edgeR = lerpRaw(pal.deep[0], pal.deep[0]*1.6, 1-tFar);
+    const edgeG = lerpRaw(pal.deep[1], pal.deep[1]*1.6, 1-tFar);
+    const edgeB = lerpRaw(pal.deep[2], pal.deep[2]*1.6, 1-tFar);
+
+    // Visibility curve — far rings fade into atmospheric haze
+    const distAlpha = clamp(1 - tFar*0.55, 0.35, 1);
+
+    // Build outer polygon path
+    ctx.beginPath();
+    for(let k=0;k<POINTS_PER_RING;k++){
+      const a = r.angles[k];
+      const peri = Math.sin(time*0.8 + r.phase + a*2)*0.02;
+      const rMul = 1 + GLOBAL_RIDGES[k] + r.localPerturb[k] + peri;
+      const px = cx + Math.cos(a) * outerR * rMul;
+      const py = cy + Math.sin(a) * outerR * rMul;
+      if(k===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+    // Inner hole (reverse direction for evenodd)
+    ctx.moveTo(cx + innerR*(1+GLOBAL_RIDGES[0]+r.localPerturb[0]), cy);
+    for(let k=POINTS_PER_RING-1;k>=0;k--){
+      const a = r.angles[k];
+      const peri = Math.sin(time*0.8 + r.phase + a*2)*0.02;
+      const rMul = 1 + GLOBAL_RIDGES[k] + r.localPerturb[k] + peri;
+      const px = cx + Math.cos(a) * innerR * rMul;
+      const py = cy + Math.sin(a) * innerR * rMul;
+      ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+
+    // Radial gradient — bright at innerR, dark at outerR
+    const grad = ctx.createRadialGradient(cx, cy, innerR*0.95, cx, cy, outerR*1.04);
+    grad.addColorStop(0,   `rgba(${wallR|0},${wallG|0},${wallB|0},${distAlpha})`);
+    grad.addColorStop(0.55,`rgba(${wallR*0.7|0},${wallG*0.6|0},${wallB*0.6|0},${distAlpha*0.95})`);
+    grad.addColorStop(1,   `rgba(${edgeR|0},${edgeG|0},${edgeB|0},${distAlpha*0.85})`);
+    ctx.fillStyle = grad;
+    ctx.fill('evenodd');
+
+    // Add bright wet specular highlight on top portion of ring (key light from above)
+    if(scale > 60){
+      const specR = outerR * 0.97;
+      ctx.beginPath();
+      for(let k=0;k<POINTS_PER_RING;k++){
+        const a = r.angles[k];
+        // Only top half (-π/2 ± π/2)
+        const angDiff = Math.abs(((a + Math.PI/2 + Math.PI*2) % (Math.PI*2)) - Math.PI);
+        if(angDiff > Math.PI*0.5) continue;
+        const peri = Math.sin(time*0.8 + r.phase + a*2)*0.02;
+        const rMul = 1 + GLOBAL_RIDGES[k] + r.localPerturb[k] + peri;
+        const px = cx + Math.cos(a) * specR * rMul;
+        const py = cy + Math.sin(a) * specR * rMul;
+        if(ctx.currentX===undefined) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+        ctx.currentX = px;
+      }
+      ctx.currentX = undefined;
+      ctx.lineWidth = Math.max(0.6, scale*0.012);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(${pal.inner[0]|0},${pal.inner[1]|0},${pal.inner[2]|0},${distAlpha*0.3})`;
+      ctx.stroke();
+    }
+  }
+
+  // ── ATMOSPHERIC HAZE OVERLAY ──
+  // Very subtle veil to give "deep tissue" volumetric feel
+  const haze = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W,H)*0.6);
+  haze.addColorStop(0, `rgba(${pal.inner[0]|0},${pal.inner[1]|0},${pal.inner[2]|0},0.15)`);
+  haze.addColorStop(0.6, `rgba(${pal.deep[0]|0},${pal.deep[1]|0},${pal.deep[2]|0},0.10)`);
+  haze.addColorStop(1, `rgba(0,0,0,0)`);
+  ctx.fillStyle = haze;
+  ctx.fillRect(0,0,W,H);
+
+  // ── UPDATE & DRAW RBCs (regular drift cells) ──
+  for(const c of RBCS){
+    c.drift += dt*0.4;
+    c.x += Math.cos(c.drift)*dt*0.005;
+    c.y += Math.sin(c.drift*1.3)*dt*0.005;
+    const r2 = Math.hypot(c.x, c.y);
+    if(r2 > 0.42){c.x *= 0.42/r2; c.y *= 0.42/r2;}
+    c.rot += c.rotSpeed * dt;
+    c.tilt += c.tiltSpeed * dt;
+  }
+  // Compute display + sort
+  const drawRBCs = [];
+  for(const c of RBCS){
+    let effZ = c.z - cameraZ;
+    while(effZ < 0.40) effZ += 14;
+    while(effZ > 14.5) effZ -= 14;
+    if(effZ < 0.30 || effZ > 14) continue;
+    drawRBCs.push({c, z:effZ, isFeature:false});
+  }
+  // Add feature RBCs (one per tab)
+  // First, find the PRIMARY feature tab (closest to IDEAL_Z)
+  // Only its label will render — prevents overlapping labels from multiple tabs
+  let primaryTabIdx = -1;
+  let primaryDist = Infinity;
+  TAB_CFG.forEach((cfg, i) => {
+    const effZ = cfg.baseZ - cameraZ;
+    // Asymmetric "active" zone: wider on the near side so a tab that
+    // just passed the camera still owns the label as user reverse-scrolls
+    if(effZ < 0.40 || effZ > IDEAL_Z + 1.6) return;
+    const dist = Math.abs(effZ - IDEAL_Z);
+    if(dist < primaryDist){ primaryDist = dist; primaryTabIdx = i; }
+  });
+
+  TAB_CFG.forEach((cfg, i) => {
+    let effZ = cfg.baseZ - cameraZ;
+    if(effZ < 0.30 || effZ > 16) return;
+    drawRBCs.push({
+      c: {x:0, y:0, sz:0.18, rot:time*0.25 + i*1.4, tilt:0.55, tiltSpeed:0, rotSpeed:0.25, drift:0},
+      z: effZ,
+      isFeature: true,
+      tabIdx: i,
+      isPrimary: (i === primaryTabIdx),
+    });
+  });
+  drawRBCs.sort((a,b)=>b.z - a.z);
+
+  for(const dc of drawRBCs){
+    drawRBC(dc.c, dc.z, FOCAL, cx, cy, pal, dc.isFeature, dc.tabIdx, dc.isPrimary);
+  }
+
+  // ── FILM GRAIN ──
+  if((grainFrame & 1) === 0) drawGrain();
+
+  // ── TABS — projected onto screen ──
+  updateTabs(cx, cy, FOCAL);
+}
+requestAnimationFrame(draw);
+
+// ═══════════════════════════════════════════════════════════════════════
+// RBC RENDERING — subsurface-scatter style
+// ═══════════════════════════════════════════════════════════════════════
+function drawRBC(c, z, FOCAL, cx, cy, pal, feature, tabIdx, isPrimary){
+  const scale = FOCAL/z;
+  if(scale < 4) return;
+  const sx = cx + c.x*scale;
+  const sy = cy + c.y*scale;
+  const sz = c.sz * scale;
+  if(sz < 1.5) return;
+  // Lens shape via vertical scale (RBC is biconcave disc)
+  const ratio = 0.42 + 0.58*Math.abs(Math.sin(c.tilt));
+
+  // Z-based atmospheric fade
+  const zFade = clamp(z/13, 0, 1);
+  const atmAlpha = clamp(1 - zFade*0.5, 0.3, 1);
+
+  // Cell color — based on zone
+  const bodyR = pal.baseColor[0];
+  const bodyG = pal.baseColor[1];
+  const bodyB = pal.baseColor[2];
+  // Hot core (backlight bleed) — much brighter, warm
+  const hotR = lerpRaw(255, pal.inner[0], 0.3);
+  const hotG = lerpRaw(180, pal.inner[1], 0.3);
+  const hotB = lerpRaw(140, pal.inner[2], 0.3);
+  // Edge dark
+  const edgeR = bodyR * 0.30;
+  const edgeG = bodyG * 0.25;
+  const edgeB = bodyB * 0.30;
+
+  // Outer glow halo (subsurface scatter spilling out)
+  const haloMul = feature ? 2.4 : 1.5;
+  const haloR = sz * haloMul;
+  const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, haloR);
+  halo.addColorStop(0,    `rgba(${bodyR|0},${bodyG|0},${bodyB|0},${atmAlpha * (feature?0.55:0.35)})`);
+  halo.addColorStop(0.4,  `rgba(${bodyR|0},${bodyG|0},${bodyB|0},${atmAlpha * (feature?0.20:0.10)})`);
+  halo.addColorStop(1,    `rgba(${bodyR|0},${bodyG|0},${bodyB|0},0)`);
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(sx, sy, haloR, 0, Math.PI*2); ctx.fill();
+
+  // Body — drawn rotated and squashed
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(c.rot);
+  ctx.scale(1, ratio);
+
+  // Layer 1: bright translucent body (light passes through cell — subsurface)
+  // Inner is hot, outer goes to body color, then darker rim
+  const body = ctx.createRadialGradient(0, 0, 0, 0, 0, sz);
+  body.addColorStop(0,    `rgba(${hotR|0},${hotG|0},${hotB|0},${atmAlpha*0.95})`);
+  body.addColorStop(0.40, `rgba(${(bodyR*1.2)|0},${(bodyG*1.0)|0},${(bodyB*1.0)|0},${atmAlpha*0.92})`);
+  body.addColorStop(0.85, `rgba(${bodyR|0},${bodyG|0},${bodyB|0},${atmAlpha*0.88})`);
+  body.addColorStop(1,    `rgba(${edgeR|0},${edgeG|0},${edgeB|0},${atmAlpha*0.78})`);
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(0, 0, sz, 0, Math.PI*2); ctx.fill();
+
+  // Layer 2: biconcave dent at center (RBCs have central depression)
+  // Show the dent strongly when face-on (cos(tilt) high)
+  const faceOn = Math.abs(Math.cos(c.tilt));
+  if(sz > 8 && faceOn > 0.4){
+    const dentSize = sz * 0.45;
+    const dent = ctx.createRadialGradient(0, 0, 0, 0, 0, dentSize);
+    dent.addColorStop(0, `rgba(${(edgeR*0.6)|0},${(edgeG*0.6)|0},${(edgeB*0.6)|0},${atmAlpha*0.65*faceOn})`);
+    dent.addColorStop(0.7, `rgba(${(edgeR*0.6)|0},${(edgeG*0.6)|0},${(edgeB*0.6)|0},${atmAlpha*0.30*faceOn})`);
+    dent.addColorStop(1, `rgba(${(edgeR*0.6)|0},${(edgeG*0.6)|0},${(edgeB*0.6)|0},0)`);
+    ctx.fillStyle = dent;
+    ctx.beginPath(); ctx.arc(0, 0, dentSize, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Layer 3: glossy specular highlight (key light from upper-left)
+  if(sz > 6){
+    const specCx = -sz*0.22, specCy = -sz*0.30;
+    const specR = sz*0.55;
+    const spec = ctx.createRadialGradient(specCx, specCy, 0, specCx, specCy, specR);
+    spec.addColorStop(0, `rgba(255,${(220 + (1-Pd)*30)|0},${(180 + (1-Pd)*40)|0},${atmAlpha*0.65})`);
+    spec.addColorStop(0.5, `rgba(255,${(220)|0},${(190)|0},${atmAlpha*0.20})`);
+    spec.addColorStop(1, `rgba(255,255,255,0)`);
+    ctx.fillStyle = spec;
+    ctx.beginPath();
+    ctx.ellipse(specCx, specCy, sz*0.40, sz*0.18, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Layer 4: subtle dark rim at edge (where light is absorbed)
+  if(sz > 10){
+    ctx.lineWidth = Math.max(0.5, sz*0.04);
+    ctx.strokeStyle = `rgba(${edgeR|0},${edgeG|0},${edgeB|0},${atmAlpha*0.7})`;
+    ctx.beginPath(); ctx.arc(0, 0, sz, 0, Math.PI*2); ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // For FEATURE cells — add an extra outer luminous ring (highlights this is "the one")
+  if(feature && sz > 6){
+    const ringR = sz * 1.18;
+    ctx.lineWidth = Math.max(0.8, sz*0.04);
+    ctx.strokeStyle = `rgba(${hotR|0},${hotG|0},${hotB|0},${atmAlpha*0.55})`;
+    ctx.beginPath(); ctx.arc(sx, sy, ringR, 0, Math.PI*2); ctx.stroke();
+  }
+
+  // ── FEATURE TAB LABEL — only render for the PRIMARY (closest) tab ──
+  // This guarantees a single label is shown at a time, regardless of scroll direction.
+  if(feature && isPrimary && tabIdx !== undefined && tabIdx >= 0){
+    const cfg = TAB_CFG[tabIdx];
+    if(cfg && cfg.titleLabel){
+      // Asymmetric visibility curve:
+      //   far side  (z > IDEAL_Z): cell is approaching, fade label IN as it nears
+      //   near side (z < IDEAL_Z): cell is passing camera, KEEP label visible
+      // This way reverse-scrolling past a tab keeps it labeled until cell exits frame.
+      let labelVis = 0;
+      if(z >= IDEAL_Z){
+        // Approaching: full at IDEAL_Z, fades to 0 at z = IDEAL_Z + 1.6
+        const k = clamp((z - IDEAL_Z)/1.6, 0, 1);
+        labelVis = Math.pow(1 - k, 1.5);
+      } else if(z >= 0.4){
+        // Passing through: stays mostly visible until cell exits to 0.4
+        const k = clamp((IDEAL_Z - z)/(IDEAL_Z - 0.4), 0, 1);
+        labelVis = 1 - k * 0.45;  // never drops below 0.55 while passing
+      }
+      if(labelVis > 0.02 && sz > 14){
+        const labelAlpha = atmAlpha * labelVis;
+
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.textAlign = 'center';
+
+        // Y offsets — push title well above the cell+halo, subtitle below.
+        // Clamp offsets when cell becomes huge (passing camera) so labels stay on screen.
+        const titleY = -Math.min(sz * 1.85, sz + 90);
+        const ruleY  = titleY - 22;
+        const catY   = titleY - 36;
+        const subY   =  Math.min(sz * 1.55, sz + 60);
+
+        // ── Top: "01 / 产品" ──
+        const fontSizeTop = clamp(sz * 0.13, 9, 22);
+        ctx.font = `700 ${fontSizeTop}px Antonio, system-ui, sans-serif`;
+        ctx.textBaseline = 'bottom';
+        if('letterSpacing' in ctx) ctx.letterSpacing = `${Math.max(2,fontSizeTop*0.32)}px`;
+        // Strong dark shadow for legibility
+        ctx.shadowColor = `rgba(0,0,0,${labelAlpha*0.95})`;
+        ctx.shadowBlur = fontSizeTop * 1.4;
+        ctx.fillStyle = `rgba(${pal.inner[0]|0},${pal.inner[1]|0},${pal.inner[2]|0},${labelAlpha})`;
+        ctx.fillText(`${cfg.numLabel}  /  ${cfg.catLabel}`, 0, catY);
+        ctx.shadowBlur = 0;
+
+        // Thin separator rule
+        const ruleW = clamp(sz * 0.55, 32, 80);
+        ctx.strokeStyle = `rgba(${pal.inner[0]|0},${pal.inner[1]|0},${pal.inner[2]|0},${labelAlpha*0.6})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-ruleW/2, ruleY);
+        ctx.lineTo(ruleW/2,  ruleY);
+        ctx.stroke();
+
+        // ── Big title (well above cell) ──
+        const fontSizeMain = clamp(sz * 0.34, 22, 56);
+        ctx.font = `700 ${fontSizeMain}px Antonio, system-ui, sans-serif`;
+        ctx.fillStyle = `rgba(255,250,245,${labelAlpha})`;
+        if('letterSpacing' in ctx) ctx.letterSpacing = `${Math.max(0.5,fontSizeMain*0.025)}px`;
+        // Heavy double-pass shadow for legibility against bright glow
+        ctx.shadowColor = `rgba(0,0,0,${labelAlpha*0.95})`;
+        ctx.shadowBlur = fontSizeMain * 0.85;
+        ctx.fillText(cfg.titleLabel, 0, titleY);
+        // Second pass — sharper shadow closer to text
+        ctx.shadowBlur = fontSizeMain * 0.35;
+        ctx.fillText(cfg.titleLabel, 0, titleY);
+        ctx.shadowBlur = 0;
+
+        // ── Subtitle below ──
+        const fontSizeSub = clamp(sz * 0.13, 9, 14);
+        ctx.font = `300 ${fontSizeSub}px 'DM Sans', system-ui, sans-serif`;
+        ctx.fillStyle = `rgba(${pal.inner[0]|0},${pal.inner[1]|0},${pal.inner[2]|0},${labelAlpha*0.78})`;
+        if('letterSpacing' in ctx) ctx.letterSpacing = `${Math.max(0.5,fontSizeSub*0.10)}px`;
+        ctx.textBaseline = 'top';
+        ctx.shadowColor = `rgba(0,0,0,${labelAlpha*0.85})`;
+        ctx.shadowBlur = fontSizeSub * 1.5;
+        ctx.fillText(cfg.subLabel || '', 0, subY);
+        ctx.shadowBlur = 0;
+
+        // Reset
+        if('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+        ctx.restore();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TABS — anchor at center, follow projected feature-RBC position
+// HTML tab disk + text floats just to the right of the cell
+// ═══════════════════════════════════════════════════════════════════════
+function updateTabs(cx, cy, FOCAL){
+  let nearestIdx = -1;
+  let nearestDist = Infinity;
+
+  TAB_CFG.forEach((cfg, i) => {
+    const el = document.getElementById(cfg.id);
+    if(!el) return;
+    const z = cfg.baseZ - cameraZ;
+    if(z < 0.4 || z > 16){
+      el.style.opacity = 0;
+      el.style.transform = `translate(-9999px,-9999px)`;
+      return;
+    }
+    const scale = FOCAL/z;
+    // Cell projects to (cx, cy) since x=y=0
+    const sx = cx;
+    const sy = cy;
+
+    // Visibility — tab visible only when z is in working range, peak at IDEAL_Z
+    const distFromIdeal = Math.abs(z - IDEAL_Z);
+    const visibility = clamp(1 - distFromIdeal/3.0, 0, 1);
+    if(visibility < 0.05){
+      el.style.opacity = 0;
+      el.style.transform = `translate(-9999px,-9999px)`;
+      return;
+    }
+    if(distFromIdeal < nearestDist){
+      nearestDist = distFromIdeal;
+      nearestIdx = i;
+    }
+
+    // Tab transform: anchor at center, offset right of cell by ~140px (proportional to scale)
+    // The cell appears at center; tab disk floats to right side
+    const featureCellRadius = (0.16) * scale;
+    const offsetX = featureCellRadius * 1.05 + 18;
+    const offsetY = -featureCellRadius * 0.05;
+    // Scale based on z proximity (when tab arrives, scales up, then exits big)
+    let tabScale, tabBlur, tabOpacity;
+    if(z > IDEAL_Z){
+      // Approaching — small to normal
+      const k = clamp((z - IDEAL_Z)/3.0, 0, 1);
+      tabScale = lerpRaw(1.0, 0.7, k);
+      tabBlur = k * 6;
+      tabOpacity = 1 - k;
+    } else {
+      // Receding — normal to large/blur
+      const k = clamp((IDEAL_Z - z)/IDEAL_Z, 0, 1);
+      tabScale = lerpRaw(1.0, 1.6, k);
+      tabBlur = k * 8;
+      tabOpacity = 1 - k*1.2;
+    }
+    tabOpacity = clamp(tabOpacity, 0, 1);
+
+    el.style.transform = `translate(${offsetX}px,${offsetY}px) translate(-50%,-50%) scale(${tabScale})`;
+    // Wait — left:50%,top:50% places the tab's TOP-LEFT at center.
+    // We need to center the tab, then offset.
+    // Apply: translate(-50%,-50%) first centers tab on (50%,50%), then translate offset moves it.
+    el.style.transform = `translate(${offsetX - el.offsetWidth/2}px,${offsetY - el.offsetHeight/2}px) scale(${tabScale})`;
+    el.style.transformOrigin = 'left center';
+    el.style.opacity = tabOpacity;
+    el.style.filter = tabBlur > 0.05 ? `blur(${tabBlur.toFixed(2)}px)` : '';
+    el.style.zIndex = String(Math.floor(1000 - z*40));
+  });
+
+  // Active state — closest to ideal Z
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  if(nearestIdx >= 0 && nearestDist < 1.0){
+    document.getElementById(TAB_CFG[nearestIdx].id).classList.add('active');
+  }
+  if(activeTabIndex !== nearestIdx){
+    activeTabIndex = nearestIdx;
+    refreshChapterStage();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CHAPTER STAGE
+// ═══════════════════════════════════════════════════════════════════════
+const heroStage = document.getElementById('hero-stage');
+const chapters = document.querySelectorAll('.chapter');
+const annotationCards = document.querySelectorAll('.annotation-card');
+function refreshChapterStage(){
+  const showChapter = activeTabIndex >= 0;
+  heroStage.style.opacity = showChapter ? '0' : '1';
+  chapters.forEach((c,i)=>{
+    c.classList.toggle('show', showChapter && i===activeTabIndex);
+  });
+  // 显示对应的标注卡片
+  annotationCards.forEach((card,i)=>{
+    card.classList.toggle('show', showChapter && i===activeTabIndex);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 点击细胞或任意位置 - 跳转到首页
+// ═══════════════════════════════════════════════════════════════════════
+document.querySelector('.vessel-inner').addEventListener('click', () => {
+  window.parent.location.href = '/products';
+});
+
+// 点击 hint 也跳转
+const hint = document.getElementById('hint');
+if (hint) {
+  hint.addEventListener('click', () => {
+    window.parent.location.href = '/products';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// UI STATE UPDATES
+// ═══════════════════════════════════════════════════════════════════════
+const QUOTES=[
+  '智能贴片，让生理监测无感融入。',
+  '体温的每一度变化，都被精准记录。',
+  '高温作业现场，从被动防护到主动预警。',
+  '云端数据，让每一次出险都有据可查。',
+  '让每一位高温作业者，安全归家。'
+];
+function updateUI(){
+  const p=P;
+  const pip=document.getElementById('pip');
+  pip.style.top=(p*100)+'%';
+  pip.style.background = p<.5 ? `hsl(${lerpRaw(5,220,p*2)},80%,62%)` : `hsl(210,78%,62%)`;
+  pip.style.boxShadow  = p<.5 ? `0 0 10px 4px rgba(255,50,20,${.9-p})` : `0 0 10px 4px rgba(40,130,255,${p})`;
+
+  const temp = lerpRaw(42.0, 36.5, p);
+  const tval = document.getElementById('thermo-val');
+  tval.textContent = temp.toFixed(1) + '°';
+  tval.style.color = p<.5 ? `hsl(${lerpRaw(8,200,p*2)},75%,72%)` : `hsl(205,72%,76%)`;
+  const fluid = document.getElementById('thermo-fluid');
+  fluid.style.height = lerpRaw(92, 48, p)+'%';
+  fluid.style.background = p<.5
+    ? `linear-gradient(to top,hsl(${lerpRaw(8,30,p*2)},90%,55%),hsl(${lerpRaw(15,210,p*2)},85%,65%))`
+    : `linear-gradient(to top,hsl(220,80%,55%),hsl(200,75%,68%))`;
+  fluid.style.boxShadow = p<.5
+    ? `0 0 8px hsl(${lerpRaw(8,200,p*2)},80%,55%)`
+    : `0 0 8px hsl(210,75%,60%)`;
+  const bulb = document.getElementById('thermo-bulb');
+  bulb.style.background = p<.5
+    ? `radial-gradient(circle at 35% 35%,hsl(${lerpRaw(15,210,p*2)},90%,72%),hsl(${lerpRaw(8,205,p*2)},85%,42%))`
+    : `radial-gradient(circle at 35% 35%,hsl(205,80%,72%),hsl(215,80%,42%))`;
+  bulb.style.boxShadow = p<.5
+    ? `0 0 12px hsl(${lerpRaw(8,205,p*2)},85%,52%)`
+    : `0 0 12px hsl(210,80%,55%)`;
+
+  const stepIdx = Math.max(0, Math.min(4, activeTabIndex>=0?activeTabIndex:Math.floor(p*5)));
+  document.getElementById('b-step-num').textContent = String(stepIdx+1).padStart(2,'0');
+  document.getElementById('b-bar-fill').style.width = (p*100)+'%';
+
+  const qi=Math.min(QUOTES.length-1,(p*(QUOTES.length-.01))|0);
+  const bq=document.getElementById('bq');
+  if(bq.dataset.qi !== ''+qi){
+    bq.style.opacity='0';
+    setTimeout(()=>{bq.textContent=QUOTES[qi];bq.style.opacity='';}, 280);
+    bq.dataset.qi = ''+qi;
+  }
+
+  const hint=document.getElementById('hint');
+  if(p>0.02) hint.classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUDIO ENGINE — Web Audio API procedural sound
+// ═══════════════════════════════════════════════════════════════════════
+const Audio = {
+  ctx: null, master: null, enabled: false, initialized: false,
+  ambientGain: null, ambientFilter: null, ambientNoise: null,
+  heartTimer: null, heartBPM: 72, _noiseBuf: null,
+  init(){
+    if(this.initialized) return;
+    const C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return;
+    this.ctx = new C();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0;
+    this.master.connect(this.ctx.destination);
+    this.initialized = true;
+  },
+  _makeNoise(){
+    if(this._noiseBuf) return this._noiseBuf;
+    const sec = 4;
+    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate*sec, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<data.length;i++){
+      const w = Math.random()*2-1;
+      b0=0.99886*b0+w*0.0555179;
+      b1=0.99332*b1+w*0.0750759;
+      b2=0.96900*b2+w*0.1538520;
+      b3=0.86650*b3+w*0.3104856;
+      b4=0.55000*b4+w*0.5329522;
+      b5=-0.7616*b5-w*0.0168980;
+      data[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11;
+      b6 = w*0.115926;
+    }
+    this._noiseBuf = buf;
+    return buf;
+  },
+  startAmbient(){
+    if(!this.ctx || this.ambientNoise) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._makeNoise();
+    src.loop = true;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = 480;
+    filt.Q.value = 0.8;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+    const lfo = this.ctx.createOscillator();
+    lfo.frequency.value = 0.12;
+    const lfoGain = this.ctx.createGain();
+    lfoGain.gain.value = 80;
+    lfo.connect(lfoGain).connect(filt.frequency);
+    lfo.start();
+    src.connect(filt).connect(gain).connect(this.master);
+    src.start();
+    gain.gain.linearRampToValueAtTime(0.18, this.ctx.currentTime + 1.6);
+    this.ambientNoise = src; this.ambientFilter = filt; this.ambientGain = gain;
+  },
+  beat(volume){
+    if(!this.ctx || !this.enabled) return;
+    volume = volume || 1.0;
+    const t = this.ctx.currentTime;
+    const playThump = (offset, freq, amp, dur)=>{
+      const osc = this.ctx.createOscillator();
+      const env = this.ctx.createGain();
+      const filt = this.ctx.createBiquadFilter();
+      filt.type='lowpass'; filt.frequency.value = 220;
+      osc.type='sine';
+      osc.frequency.setValueAtTime(freq*1.6, t+offset);
+      osc.frequency.exponentialRampToValueAtTime(freq, t+offset+0.05);
+      env.gain.setValueAtTime(0, t+offset);
+      env.gain.linearRampToValueAtTime(amp*volume, t+offset+0.012);
+      env.gain.exponentialRampToValueAtTime(0.0001, t+offset+dur);
+      osc.connect(filt).connect(env).connect(this.master);
+      osc.start(t+offset);
+      osc.stop(t+offset+dur+0.05);
+    };
+    playThump(0,    52, 0.55, 0.30);
+    playThump(0.18, 64, 0.42, 0.26);
+  },
+  startHeartLoop(){
+    const tick = ()=>{
+      if(!this.enabled){ this.heartTimer = setTimeout(tick, 200); return; }
+      this.beat(1.0);
+      const interval = 60000/this.heartBPM;
+      this.heartTimer = setTimeout(tick, interval);
+    };
+    if(this.heartTimer) clearTimeout(this.heartTimer);
+    this.heartTimer = setTimeout(tick, 100);
+  },
+  setHeartBPM(bpm){ this.heartBPM = clamp(bpm, 50, 120); },
+  inhale(){
+    if(!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const env = this.ctx.createGain();
+    const filt = this.ctx.createBiquadFilter();
+    filt.type='bandpass';
+    filt.frequency.setValueAtTime(280, t);
+    filt.frequency.exponentialRampToValueAtTime(900, t+0.6);
+    filt.Q.value = 6;
+    osc.type='sawtooth';
+    osc.frequency.setValueAtTime(120, t);
+    osc.frequency.exponentialRampToValueAtTime(380, t+0.55);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.10, t+0.10);
+    env.gain.exponentialRampToValueAtTime(0.0001, t+0.7);
+    osc.connect(filt).connect(env).connect(this.master);
+    osc.start(t); osc.stop(t+0.75);
+  },
+  shiftZone(toBlue){
+    if(!this.ctx || !this.ambientFilter) return;
+    const t = this.ctx.currentTime;
+    this.ambientFilter.frequency.cancelScheduledValues(t);
+    this.ambientFilter.frequency.setValueAtTime(this.ambientFilter.frequency.value, t);
+    this.ambientFilter.frequency.exponentialRampToValueAtTime(toBlue ? 220 : 600, t+1.8);
+  },
+  enable(){
+    if(!this.initialized) this.init();
+    if(!this.ctx) return;
+    if(this.ctx.state === 'suspended') this.ctx.resume();
+    this.enabled = true;
+    this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.master.gain.setValueAtTime(this.master.gain.value, this.ctx.currentTime);
+    this.master.gain.linearRampToValueAtTime(0.85, this.ctx.currentTime + 0.4);
+    this.startAmbient();
+    this.startHeartLoop();
+    const tog = document.getElementById('snd-tog');
+    tog.classList.remove('off'); tog.classList.add('on');
+    tog.querySelector('.snd-label').textContent = '声音 开';
+  },
+  disable(){
+    if(!this.ctx) return;
+    this.enabled = false;
+    this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.master.gain.setValueAtTime(this.master.gain.value, this.ctx.currentTime);
+    this.master.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.5);
+    const tog = document.getElementById('snd-tog');
+    tog.classList.add('off'); tog.classList.remove('on');
+    tog.querySelector('.snd-label').textContent = '声音 关';
+  },
+  toggle(){ if(this.enabled) this.disable(); else this.enable(); },
+};
+
+document.getElementById('snd-tog').addEventListener('click',()=>{ Audio.toggle(); });
+
+// PHYSIOLOGY COUPLING: heart rate ↔ core temperature, zone-shift on red↔blue
+let lastZoneSide = -1;
+function couplePhysiology(){
+  Audio.setHeartBPM(lerpRaw(95, 65, P));
+  const side = P < 0.5 ? 0 : 1;
+  if(side !== lastZoneSide){
+    if(lastZoneSide !== -1) Audio.shiftZone(side === 1);
+    lastZoneSide = side;
+  }
+}
+sw.addEventListener('scroll', couplePhysiology);
+
+// Tab activation → inhale sound
+const _origRefresh = refreshChapterStage;
+refreshChapterStage = function(){
+  _origRefresh();
+  if(activeTabIndex >= 0 && Audio.enabled) Audio.inhale();
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// INTRO CEREMONY
+// ═══════════════════════════════════════════════════════════════════════
+const Intro = {
+  el: document.getElementById('intro'),
+  cv: document.getElementById('intro-cv'),
+  ctx: null,
+  W:0, H:0, DPR: Math.min(window.devicePixelRatio||1, 1.6),
+  startT: 0, done: false, _beatScheduled: false,
+  particles: [], _cellsCreated: false,
+
+  init(){
+    this.ctx = this.cv.getContext('2d');
+    this.resize();
+    window.addEventListener('resize', ()=>this.resize());
+    this.startT = performance.now();
+    requestAnimationFrame(this.tick.bind(this));
+    setTimeout(()=>this.el.classList.add('show-mark'),    400);
+    setTimeout(()=>this.el.classList.add('show-skip'),    1500);
+    setTimeout(()=>this.el.classList.add('show-prompt'),  1800);
+    setTimeout(()=>this.el.classList.add('show-title'),   3000);
+  },
+  resize(){
+    this.W = innerWidth; this.H = innerHeight;
+    this.cv.width = this.W*this.DPR; this.cv.height = this.H*this.DPR;
+    this.cv.style.width = this.W+'px'; this.cv.style.height = this.H+'px';
+    this.ctx.setTransform(this.DPR,0,0,this.DPR,0,0);
+  },
+  tick(now){
+    if(this.done) return;
+    requestAnimationFrame(this.tick.bind(this));
+    const t = (now - this.startT)/1000;
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const cx = W/2, cy = H/2;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,W,H);
+
+    // Schedule heartbeat sounds at exact moments
+    if(!this._beatScheduled){
+      this._beatScheduled = true;
+      setTimeout(()=>Audio.beat(0.7),  600);
+      setTimeout(()=>Audio.beat(1.0), 1400);
+      setTimeout(()=>Audio.beat(1.0), 2400);
+    }
+
+    // Stage timeline
+    let coreBrightness = 0;
+    if(t > 0.6) coreBrightness = clamp((t-0.6)/0.6, 0, 0.5);
+    if(t > 1.4) coreBrightness = clamp(0.5 + (t-1.4)/1.0 * 0.4, 0, 0.9);
+    if(t > 2.4) coreBrightness = clamp(0.9 + (t-2.4)/2.0 * 0.1, 0, 1.0);
+
+    let throb = 1;
+    function pulseAt(beatTime){
+      const dt = t - beatTime;
+      if(dt < 0 || dt > 0.6) return 0;
+      return Math.exp(-dt*8)*0.5;
+    }
+    throb += pulseAt(0.6) + pulseAt(1.4) + pulseAt(2.4);
+
+    if(coreBrightness > 0.01){
+      const lightR = Math.min(W,H) * 0.42 * coreBrightness * throb;
+      const grad = ctx.createRadialGradient(cx,cy,0, cx,cy, lightR);
+      grad.addColorStop(0,    `rgba(255,235,200,${coreBrightness*0.95})`);
+      grad.addColorStop(0.10, `rgba(255,180,130,${coreBrightness*0.75})`);
+      grad.addColorStop(0.30, `rgba(220,80,40,${coreBrightness*0.45})`);
+      grad.addColorStop(0.60, `rgba(80,20,15,${coreBrightness*0.20})`);
+      grad.addColorStop(1,    `rgba(0,0,0,0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = `rgba(255,250,240,${coreBrightness*0.9})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3 + coreBrightness*4, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // Vessel rings growing outward (2.4s → 4.5s)
+    if(t > 2.4){
+      const growT = clamp((t-2.4)/2.0, 0, 1);
+      const ringCount = 18;
+      const FOCAL = Math.min(W,H) * 0.62;
+      for(let i=0;i<ringCount;i++){
+        const ringStart = i * 0.10;
+        const ringT = clamp(growT - ringStart, 0, 1);
+        if(ringT <= 0) continue;
+        const z = lerpRaw(10, 0.6, ringT);
+        const baseR = FOCAL / z;
+        const fadeIn = clamp(ringT*4, 0, 1);
+        const fadeOut = clamp(1 - (ringT-0.85)/0.15, 0, 1);
+        const a = fadeIn * fadeOut * 0.85;
+        const r = lerpRaw(120, 240, ringT*0.7);
+        const N = 48;
+        ctx.beginPath();
+        for(let k=0;k<N;k++){
+          const ang = (k/N)*Math.PI*2;
+          const ridge = Math.sin(ang*4 + i*0.7)*0.07
+                      + Math.sin(ang*7 + i*1.3)*0.04;
+          const rad = baseR * (1 + ridge);
+          const px = cx + Math.cos(ang)*rad;
+          const py = cy + Math.sin(ang)*rad;
+          if(k===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+        }
+        ctx.closePath();
+        const innerR = baseR * 0.86;
+        ctx.moveTo(cx + innerR, cy);
+        for(let k=N-1;k>=0;k--){
+          const ang = (k/N)*Math.PI*2;
+          const ridge = Math.sin(ang*4 + i*0.7)*0.07
+                      + Math.sin(ang*7 + i*1.3)*0.04;
+          const rad = innerR * (1 + ridge);
+          const px = cx + Math.cos(ang)*rad;
+          const py = cy + Math.sin(ang)*rad;
+          ctx.lineTo(px,py);
+        }
+        ctx.closePath();
+        const grd = ctx.createRadialGradient(cx,cy, innerR*0.95, cx,cy, baseR*1.05);
+        grd.addColorStop(0,   `rgba(${r|0},35,18,${a})`);
+        grd.addColorStop(0.6, `rgba(${(r*0.7)|0},20,10,${a*0.85})`);
+        grd.addColorStop(1,   `rgba(${(r*0.25)|0},6,6,${a*0.6})`);
+        ctx.fillStyle = grd;
+        ctx.fill('evenodd');
+      }
+    }
+
+    // First red blood cells drift in (4.3s+)
+    if(t > 4.3){
+      const cellT = clamp((t-4.3)/1.5, 0, 1);
+      if(!this._cellsCreated){
+        this._cellsCreated = true;
+        for(let i=0;i<6;i++){
+          const ang = Math.random()*Math.PI*2;
+          const r = Math.random()*0.35;
+          this.particles.push({
+            x: Math.cos(ang)*r,
+            y: Math.sin(ang)*r,
+            zStart: 6 + Math.random()*3,
+            sz: 0.05 + Math.random()*0.03,
+            rot: Math.random()*Math.PI*2,
+            tilt: Math.random()*Math.PI,
+            delay: Math.random()*0.6,
+          });
+        }
+      }
+      const FOCAL = Math.min(W,H) * 0.62;
+      for(const p of this.particles){
+        const localT = clamp(cellT - p.delay, 0, 1);
+        if(localT <= 0) continue;
+        const z = lerpRaw(p.zStart, 0.5, localT);
+        const scale = FOCAL/z;
+        const sx = cx + p.x*scale;
+        const sy = cy + p.y*scale;
+        const sz = p.sz * scale;
+        if(sz < 1) continue;
+        const ratio = 0.5 + 0.5*Math.abs(Math.sin(p.tilt + t*0.4));
+        const a = clamp(localT*1.3, 0, 1);
+        const halo = ctx.createRadialGradient(sx,sy,0,sx,sy,sz*1.6);
+        halo.addColorStop(0,`rgba(220,40,20,${a*0.4})`);
+        halo.addColorStop(1,`rgba(220,40,20,0)`);
+        ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(sx,sy,sz*1.6,0,Math.PI*2); ctx.fill();
+        ctx.save();
+        ctx.translate(sx,sy);
+        ctx.rotate(p.rot);
+        ctx.scale(1, ratio);
+        const body = ctx.createRadialGradient(0,0,0,0,0,sz);
+        body.addColorStop(0, `rgba(255,140,110,${a*0.95})`);
+        body.addColorStop(0.5, `rgba(220,40,20,${a*0.95})`);
+        body.addColorStop(1, `rgba(80,8,8,${a*0.85})`);
+        ctx.fillStyle = body;
+        ctx.beginPath(); ctx.arc(0,0,sz,0,Math.PI*2); ctx.fill();
+        if(sz > 4){
+          const spec = ctx.createRadialGradient(-sz*0.2,-sz*0.3,0,-sz*0.2,-sz*0.3,sz*0.5);
+          spec.addColorStop(0,`rgba(255,220,180,${a*0.6})`);
+          spec.addColorStop(1,`rgba(255,220,180,0)`);
+          ctx.fillStyle = spec;
+          ctx.beginPath();
+          ctx.ellipse(-sz*0.2,-sz*0.3, sz*0.4, sz*0.18, 0, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    // 已删除自动跳转逻辑
+  },
+  finish(){
+    if(this.done) return;
+    this.done = true;
+    this.el.classList.add('fading');
+    setTimeout(()=>{ this.el.style.display = 'none'; }, 1700);
+    document.getElementById('hint').classList.add('show');
+    document.getElementById('snd-tog').classList.add('shown');
+  },
+  skip(){ this.finish(); },
+};
+
+document.getElementById('i-prompt').addEventListener('click',()=>{
+  Audio.init();
+  Audio.enable();
+  Intro.finish();
+});
+document.getElementById('i-skip').addEventListener('click',()=>{ Intro.skip(); });
+
+// Hide hint until intro finishes (already handled via class — just remove .show)
+document.getElementById('hint').classList.remove('show');
+
+// Init
+resize();
+updateUI();
+refreshChapterStage();
+Intro.init();
+</script>
+</body>
+</html>
